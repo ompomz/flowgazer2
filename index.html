@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>flowgazer</title>
-<link rel="icon" type="image/x-icon" href="favicon.ico">
+<link rel="icon" type="image/x-icon" href="https://ompomz.github.io/flowgazer/favicon.ico">
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box;}
 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"; padding: 0.5rem; line-height: 1.3; font-weight: normal; background-color: #f7f7f7; color: #666; font-size: 0.9rem;}
@@ -180,7 +180,7 @@ let getDisplayName = (pubkey) => {
 };
 let fetchProfilesForPubkeys = () => {};
 try {
-  import('./displayname.js').then(module => {
+  import('https://ompomz.github.io/flowgazer/displayname.js').then(module => {
     getDisplayName = (pubkey) => module.getDisplayName(pubkey, profiles);
     fetchProfilesForPubkeys = (pubkeys) => module.fetchProfilesForPubkeys(pubkeys, profiles, refreshTimeline);
     console.log('displayname.jsが正常に読み込まれました。プロファイル取得はdisplayname.jsが管理します。')

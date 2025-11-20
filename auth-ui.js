@@ -5,6 +5,7 @@ function createAuthUI() {
     // オーバーレイ要素の作成とスタイリング
     const overlay = document.createElement('div');
     overlay.id = 'auth-overlay';
+    // 背景を半透明の黒、背景を少しぼかす設定は維持
     overlay.style.cssText = `
         position: fixed;
         top: 0;
@@ -21,31 +22,37 @@ function createAuthUI() {
 
     // 認証パネル要素の作成とスタイリング
     const panel = document.createElement('div');
+    // CSSの.containerのスタイルを参考に、白背景、padding、角丸を適用
     panel.style.cssText = `
         background: #fff;
-        padding: 2rem;
-        border-radius: 8px;
+        padding: 1.5rem; /* .containerのpaddingより少し多めに */
+        border-radius: 8px; /* スタイルシートに合わせて */
         max-width: 400px;
         width: 90%;
+        color: #666; /* bodyのcolorに合わせる */
+        font-size: .9rem; /* bodyのfont-sizeに合わせる */
+        line-height: 1.3;
     `;
 
     // パネルのinnerHTML（コンテンツ）設定
+    // **container-button クラスが適用されるように調整**
+    // **input要素のスタイルを既存CSSに合わせるためにmarginを調整**
     panel.innerHTML = `
-        <h3 style="margin-bottom: 1rem;">Nostrアカウント</h3>
+        <h3 style="font-size: 1.1rem; margin-bottom: 1rem; color: #666;">Nostrアカウント</h3>
         <div id="auth-status"></div>
 
         <div id="auth-login" style="display: none;">
-            <button id="nip07-login" class="container-button">NIP-07でログイン</button>
-            <input type="password" id="nsec-input" placeholder="nsec1..." style="margin: 0.5rem 0; width: 100%;">
-            <button id="nsec-login" class="container-button">nsecでログイン</button>
+            <button id="nip07-login" class="container-button full-width" style="margin-top: 0.5rem;">NIP-07でログイン</button>
+            <input type="password" id="nsec-input" placeholder="nsec1..." class="full-width" style="margin: 0.5rem 0; display: block;">
+            <button id="nsec-login" class="container-button full-width" style="margin-bottom: 0.5rem;">nsecでログイン</button>
         </div>
 
         <div id="auth-info" style="display: none;">
-            <p>公開鍵: <span id="auth-npub"></span></p>
-            <button id="logout-btn" class="container-button">ログアウト</button>
+            <p style="margin-bottom: 0.5rem;">公開鍵: <span id="auth-npub"></span></p>
+            <button id="logout-btn" class="container-button full-width" style="background-color: #999; margin-top: 0.5rem;">ログアウト</button>
         </div>
 
-        <button id="close-auth" class="container-button" style="margin-top: 1rem;">閉じる</button>
+        <button id="close-auth" class="container-button full-width" style="margin-top: 1rem; background-color: #ddd; color: #666;">閉じる</button>
     `;
 
     // DOMに追加
@@ -83,9 +90,9 @@ function updateAuthUI() {
         if (window.nostrAuth.nsec && !window.nostrAuth.useNIP07 && !existingNsecBtn) {
             const nsecBtn = document.createElement('button');
             nsecBtn.id = 'copy-nsec-btn';
-            nsecBtn.className = 'container-button';
+            nsecBtn.className = 'container-button full-width'; // full-widthを追加
             nsecBtn.textContent = '秘密鍵をコピー';
-            nsecBtn.style.backgroundColor = '#ff99cc';
+            nsecBtn.style.backgroundColor = '#f9c'; // #generate-keypairのカラーを参照
             nsecBtn.style.marginTop = '0.5rem';
 
             // コピー処理のイベントリスナー
@@ -95,7 +102,16 @@ function updateAuthUI() {
                     .catch(err => alert('コピーに失敗しました: ' + err.message));
             };
 
-            infoDiv.insertBefore(nsecBtn, document.getElementById('logout-btn'));
+            // ログアウトボタンの上に挿入
+            const logoutBtn = document.getElementById('logout-btn');
+            infoDiv.insertBefore(nsecBtn, logoutBtn);
+
+            // ログアウトボタンの余白を調整
+            logoutBtn.style.marginTop = '0.5rem';
+
+        } else if (existingNsecBtn) {
+             // nsecボタンがある場合は、ログアウトボタンの余白を調整
+            document.getElementById('logout-btn').style.marginTop = '0.5rem';
         }
     } else {
         // 未ログインの場合
@@ -143,6 +159,7 @@ function setupAuthEvents() {
     document.getElementById('logout-btn').addEventListener('click', () => {
         window.nostrAuth.logout();
         updateAuthUI();
+        updateLoginUI();
         alert('ログアウトしました');
     });
 

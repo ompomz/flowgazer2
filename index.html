@@ -3,8 +3,6 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<script src="https://ompomz.github.io/flowgazer2/auth.js"></script>
-<script src="https://ompomz.github.io/flowgazer2/auth-ui.js"></script>
 <title>flowgazer</title>
 <link rel="icon" type="image/x-icon" href="favicon.ico">
 <style>
@@ -130,11 +128,14 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd;}
 <ul id="timeline"></ul>
 <button id="cancel-loading" class="hidden full-width">あきらめる</button>
 <button id="load-more" class="loading full-width">もっと見る</button>
+
 <script src="https://ompomz.github.io/header/loadHeader.js"></script>
 <script src="https://ompomz.github.io/modal.js"></script>
-<script src="./tutorial.js"></script>
-<script src="./stop.js"></script>
-<script src="https://unpkg.com/nostr-tools@2.17.4/lib/nostr.bundle.js"></script>
+<script src="https://ompomz.github.io/flowgazer/tutorial.js"></script>
+<script src="https://ompomz.github.io/flowgazer/stop.js"></script>
+<script src="https://ompomz.github.io/flowgazer2/auth.js"></script>
+<script src="https://ompomz.github.io/flowgazer2/auth-ui.js"></script>
+<script src="https://unpkg.com/nostr-tools@2.17.0/lib/nostr.bundle.js"></script>
 <script>
 const npubLink = document.getElementById('npub-link');
 const autoUpdateToggle = document.getElementById('auto-update-toggle');
@@ -823,18 +824,15 @@ function generateAndLoginWithNewKeypair() {
   location.reload();
 }
 
-window.addEventListener('DOMContentLoaded', () => {
-  // ログイン状態を確認して画面に反映
+function updateLoginUI() {
   const notLoggedInSpan = document.getElementById('not-logged-in');
-  
   if (window.nostrAuth.isLoggedIn()) {
     const npub = NostrTools.nip19.npubEncode(window.nostrAuth.pubkey);
     npubLink.textContent = npub.substring(0, 12) + '...' + npub.slice(-4);
     npubLink.href = "https://nostter.app/" + npub;
     npubLink.style.display = "inline";
     notLoggedInSpan.style.display = "none";
-    
-    // NIP-07でログイン中の場合
+
     if (window.nostrAuth.useNIP07) {
       window.nostrSigner = window.nostr;
     }
@@ -842,7 +840,11 @@ window.addEventListener('DOMContentLoaded', () => {
     npubLink.style.display = "none";
     notLoggedInSpan.style.display = "inline";
   }
-  
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  updateLoginUI(); // ← これだけでOK！
+
   // 以下は既存のコードそのまま
   document.getElementById('hide-settings').classList.add('hidden');
   document.getElementById('advanced-settings').classList.add('hidden');

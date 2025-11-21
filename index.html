@@ -73,9 +73,7 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd;}
 <div class="container">
 <div style="display: flex; justify-content: space-between; align-items: center;">
   <a href="https://github.com/ompomz/flowgazer2/"><h1>flowgazer</h1></a>
-  <button onclick="showAuthUI()" style="color: #00796b; background-color: #e0f2f1; padding: 0.25rem 1rem;">
-    ログイン
-  </button>
+  <button onclick="showAuthUI()" style="color: #00796b; background-color: #e0f2f1; padding: 0.25rem 1rem;">すでに鍵をお持ちの方</button>
 </div>
 <p>このページでは、タイムラインを見たり、鍵ペアを作って投稿したり、ふぁぼったりできるよ。作ったのはGeminiとChatGPTとcopilotとClaudeとたゃとすべての学習元様方。</p>
 <button 
@@ -85,12 +83,12 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd;}
   onclick="generateAndLoginWithNewKeypair()"
 >新しい鍵ペアを生成して試す！</button>
   <div style="display: flex; align-items: center; gap: 0.5rem; margin: 0.5rem 0;">
-  <span style="white-space: nowrap;">ログイン中:</span>
+  <span style="white-space: nowrap;">　</span>
   <a id="npub-link" class="npub-link" target="_blank" rel="noreferrer" style="display: none;"></a>
-  <span id="not-logged-in" style="color: #999;">ログインしていません</span>
+  <span id="not-logged-in" style="color: #999;">見るだけモード</span>
 </div>
 <div style="display: flex;">
- <span style="white-space: nowrap;">公開鍵（npub）:</span>
+ <span style="white-space: nowrap;">公開鍵（npub）</span>
  <span style="word-break: break-all;">
  <a id="npub-link" class="npub-link" target="_blank" rel="noreferrer"></a>
  <svg id="copy-npub-icon" class="hidden" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="cursor: pointer; margin-left: 0.25rem; vertical-align: middle;">
@@ -556,8 +554,8 @@ function repostEventView(nostrEv) {
 }
 
 async function sendLikeEvent(targetEventId, targetPubkey) {
-  if (!window.nostrAuth.isLoggedIn()) {
-    alert("ログインしてください。");
+  if (!window.nostrAuth.canWrite()) { // ← isLoggedIn() から変更
+    alert("ふぁぼるには秘密鍵でのサインインが必要です。");
     showAuthUI();
     return;
   }
@@ -753,8 +751,8 @@ function filterAuthors() {
 }
 
 async function sendeNewPost() {
-  if (!window.nostrAuth.isLoggedIn()) {
-    alert("ログインしてください。");
+  if (!window.nostrAuth.canWrite()) { // ← isLoggedIn() から変更
+    alert("投稿するには秘密鍵でのサインインが必要です。");
     showAuthUI();
     return;
   }
@@ -803,10 +801,9 @@ function checkForAutoLoad() {
 // 新規ユーザー向け：鍵ペアを生成してログイン
 function generateAndLoginWithNewKeypair() {
   const confirmed = confirm(
-    '新しいNostrアカウント（鍵ペア）を生成します。\n\n' +
-    '⚠️ 重要：生成された秘密鍵（nsec）は画面に表示されますが、' +
-    'ページをリロードすると消えます。\n必ずコピーして安全に保管してください。\n\n' +
-    '続けますか？'
+    '新しい鍵ペアを生成します。\n\n' +
+    '生成された秘密鍵（nsec）はページをリロードすると消えます。' +
+    '必ずコピーして安全に保管してください。\n\n'
   );
   
   if (!confirmed) return;

@@ -6,6 +6,24 @@ class NostrAuth {
     this.useNIP07 = false;
   }
 
+  // npubでログイン（閲覧専用）
+loginWithNpub(npub) {
+  try {
+    const decoded = NostrTools.nip19.decode(npub);
+    if (decoded.type !== 'npub') {
+      throw new Error('無効なnpubです');
+    }
+    this.pubkey = decoded.data;
+    this.nsec = null; // 秘密鍵なし
+    this.useNIP07 = false;
+    this.readOnly = true; // 閲覧専用フラグ
+    this.save();
+    return this.pubkey;
+  } catch (error) {
+    throw new Error('無効なnpub形式です: ' + error.message);
+  }
+}
+
   // NIP-07でログイン
   async loginWithExtension() {
     if (!window.nostr) {
@@ -13,6 +31,7 @@ class NostrAuth {
     }
     this.pubkey = await window.nostr.getPublicKey();
     this.useNIP07 = true;
+　  this.readOnly = false; // ← 追加
     this.save();
     return this.pubkey;
   }
@@ -26,6 +45,7 @@ class NostrAuth {
     this.nsec = nsec;
     this.pubkey = NostrTools.getPublicKey(decoded.data);
     this.useNIP07 = false;
+    this.readOnly = false; // ← 追加
     this.save();
     return this.pubkey;
   }
@@ -43,20 +63,27 @@ class NostrAuth {
     localStorage.setItem('nostr_auth', JSON.stringify({
       pubkey: this.pubkey,
       nsec: this.nsec,
-      useNIP07: this.useNIP07
+      useNIP07: this.useNIP07,
+      readOnly: this.readOnly || false // ← 追加
     }));
   }
 
   // 状態を復元
-  load() {
-    const saved = localStorage.getItem('nostr_auth');
-    if (saved) {
-      const data = JSON.parse(saved);
-      this.pubkey = data.pubkey;
-      this.nsec = data.nsec;
-      this.useNIP07 = data.useNIP07;
-    }
+load() {
+  const saved = localStorage.getItem('nostr_auth');
+  if (saved) {
+    const data = JSON.parse(saved);
+    this.pubkey = data.pubkey;
+    this.nsec = data.nsec;
+    this.useNIP07 = data.useNIP07;
+    this.readOnly = data.readOnly || false; // ← 追加
   }
+}
+
+  // 書き込み可能かチェックするメソッド
+canWrite() {
+  return this.isLoggedIn() && !this.readOnly;
+}
 
   // イベントに署名
   async signEvent(event) {
@@ -66,7 +93,7 @@ class NostrAuth {
       const decoded = NostrTools.nip19.decode(this.nsec);
       return NostrTools.finalizeEvent(event, decoded.data);
     }
-    throw new Error('ログインしていません');
+    throw new Error('署名できませんでした');
   }
 
   // ログイン状態確認

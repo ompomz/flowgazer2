@@ -196,6 +196,8 @@ let pressTimer;
 let currentTab = 'home'; // 現在表示中のタブ
 let myPostsEvents = {}; // 自分の投稿を格納
 let reactionCounts = {}; // { eventId: { reposts: 0, reactions: 0 } }
+ // 既存のグローバル変数の後に追加
+let receivedLikesEvents = {}; // 自分が受け取ったkind:7
  
 const likedEventIds = new Set();
 let hasSubscribedLikes = !1;
@@ -579,6 +581,42 @@ function repostEventView(nostrEv) {
  return view
 }
 
+ /**
+ * kind:7（ふぁぼ）イベントの表示
+ */
+function likeEventView(likeEvent) {
+  const view = baseEventView();
+  view.classList.add('event-like');
+  
+  // メタデータ（時刻と送信者）
+  view.appendChild(metadataView(likeEvent));
+  
+  // ふぁぼマーク
+  const emojiSpan = document.createElement('span');
+  emojiSpan.textContent = likeEvent.content || '⭐';
+  emojiSpan.style.cssText = 'font-size: 1.2rem; margin: 0 0.25rem;';
+  view.appendChild(emojiSpan);
+  
+  // 対象の投稿へのリンク
+  const targetEventId = likeEvent.tags.find(t => t[0] === 'e')?.[1];
+  if (targetEventId) {
+    const nevent = window.NostrTools.nip19.neventEncode({
+      id: targetEventId,
+      relays: [relayUrlInput.value]
+    });
+    
+    const link = document.createElement('a');
+    link.href = 'https://ompomz.github.io/tweetsrecap/tweet?id=' + nevent;
+    link.target = '_blank';
+    link.rel = 'noreferrer';
+    link.classList.add('nostr-ref');
+    link.textContent = '→ 投稿を見る';
+    view.appendChild(link);
+  }
+  
+  return view;
+}
+
 async function sendLikeEvent(targetEventId, targetPubkey) {
  if (!window.nostrAuth.canWrite()) { // ← isLoggedIn() から変更
  alert("ふぁぼるには秘密鍵でのサインインが必要です。");
@@ -668,75 +706,74 @@ function onEvent(nostrEv, prepend) {
 }
 
 function refreshTimeline() {
- // タイムラインをクリア
- while (timeline.firstChild) {
- timeline.removeChild(timeline.firstChild);
- }
- 
- let displayedEvents;
- 
- // タブに応じてイベントを切り替え
- if (currentTab === 'myposts') {
- // マイポストタブ：自分の投稿のみ
- displayedEvents = Object.values(myPostsEvents);
- 
- } else if (currentTab === 'home') {
- // ホームタブ：既存のロジック
- displayedEvents = Object.values(events).filter(e => {
- if (isFlowgazerOnly) {
- const isFlowgazerPost = (e.kind === 1 && e.tags.some(tag => tag[0] === 'client' && tag[1] === 'flowgazer'));
- return isFlowgazerPost;
- }
- return e.kind === 1 || e.kind === 6;
- });
- 
- } else {
- // その他のタブ（将来のふぁぼタブなど）
- displayedEvents = [];
- }
- 
- // 新しい順にソート
- const sortedEvents = displayedEvents.sort((a, b) => b.created_at - a.created_at);
- 
- // イベントを描画
- sortedEvents.forEach(e => {
- let eventView;
- 
- if (e.kind === 1) {
- eventView = postEventView(e);
- 
- if (eventView) {
- // ふぁぼ済みなら黄色い枠
- if (likedEventIds.has(e.id)) {
- eventView.classList.add('event-liked');
- }
- 
- // 【重要】マイポストタブの場合、リアクション数を表示
- if (currentTab === 'myposts' && reactionCounts[e.id]) {
- const counts = reactionCounts[e.id];
- const parts = [];
- 
- // 0より大きい場合のみ追加
- if (counts.reactions > 0) parts.push(`⭐${counts.reactions}`);
- if (counts.reposts > 0) parts.push(`🔁${counts.reposts}`);
- 
- // 何かしら表示するものがある場合のみバッジを作成
- if (parts.length > 0) {
- const badge = document.createElement('span');
- badge.textContent = ' ' + parts.join(' ');
- badge.style.cssText = 'color: #999; margin-left: 0.5rem; font-size: 0.8rem;';
- eventView.appendChild(badge);
- }
+  while (timeline.firstChild) {
+    timeline.removeChild(timeline.firstChild);
+  }
+  
+  let displayedEvents;
+  
+  // タブに応じてイベントを切り替え
+  if (currentTab === 'myposts') {
+    displayedEvents = Object.values(myPostsEvents);
+    
+  } else if (currentTab === 'likes') {
+    // 【追加】ふぁぼタブ：受け取ったkind:7
+    displayedEvents = Object.values(receivedLikesEvents);
+    
+  } else if (currentTab === 'home') {
+    displayedEvents = Object.values(events).filter(e => {
+      if (isFlowgazerOnly) {
+        const isFlowgazerPost = (e.kind === 1 && e.tags.some(tag => tag[0] === 'client' && tag[1] === 'flowgazer'));
+        return isFlowgazerPost;
+      }
+      return e.kind === 1 || e.kind === 6;
+    });
+    
+  } else {
+    displayedEvents = [];
+  }
+  
+  const sortedEvents = displayedEvents.sort((a, b) => b.created_at - a.created_at);
+  
+  sortedEvents.forEach(e => {
+    let eventView;
+    
+    if (e.kind === 1) {
+      eventView = postEventView(e);
+      
+      if (eventView) {
+        if (likedEventIds.has(e.id)) {
+          eventView.classList.add('event-liked');
+        }
+        
+        if (currentTab === 'myposts' && reactionCounts[e.id]) {
+          const counts = reactionCounts[e.id];
+          const parts = [];
+          if (counts.reactions > 0) parts.push(`⭐${counts.reactions}`);
+          if (counts.reposts > 0) parts.push(`🔁${counts.reposts}`);
+          
+          if (parts.length > 0) {
+            const badge = document.createElement('span');
+            badge.textContent = ' ' + parts.join(' ');
+            badge.style.cssText = 'color: #999; margin-left: 0.5rem; font-size: 0.8rem;';
+            eventView.appendChild(badge);
+          }
+        }
+        
+        timeline.appendChild(eventView);
+      }
+      
+    } else if (e.kind === 6) {
+      eventView = repostEventView(e);
+      if (eventView) timeline.appendChild(eventView);
+      
+    } else if (e.kind === 7) {
+      // 【追加】kind:7の表示
+      eventView = likeEventView(e);
+      if (eventView) timeline.appendChild(eventView);
+    }
+  });
 } 
- timeline.appendChild(eventView);
- }
- 
- } else if (e.kind === 6) {
- eventView = repostEventView(e);
- if (eventView) timeline.appendChild(eventView);
- }
- });
-}
  
 function onWSClose() {
  alert("Relay connection closed")
@@ -942,32 +979,32 @@ window.addEventListener('DOMContentLoaded', () => {
  if (kind7ContentInput) {
  kind7ContentInput.value = '⭐';
  }
- // タブボタンのクリックイベント
- document.querySelectorAll('.tab-button').forEach(btn => {
- btn.addEventListener('click', (e) => {
- // 全タブのactiveクラスを削除
- document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
  
- // クリックされたタブにactiveクラスを追加
- e.target.classList.add('active');
- 
- // currentTab変数を更新（'tab-home' → 'home'）
- currentTab = e.target.id.replace('tab-', '');
- 
- // タイムラインを再描画
- refreshTimeline();
- 
- // マイポストタブに切り替えたときに自動取得
- if (currentTab === 'myposts' && Object.keys(myPostsEvents).length === 0) {
- fetchMyPosts();
- }
- });
- });
- 
- // ログイン済みなら自動で自分の投稿を取得
- if (window.nostrAuth.isLoggedIn()) {
- fetchMyPosts();
- }
+// タブボタンのクリックイベント（既存のコードを修正）
+document.querySelectorAll('.tab-button').forEach(btn => {
+  btn.addEventListener('click', (e) => {
+    document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
+    e.target.classList.add('active');
+    currentTab = e.target.id.replace('tab-', '');
+    refreshTimeline();
+    
+    // マイポストタブに切り替えたとき
+    if (currentTab === 'myposts' && Object.keys(myPostsEvents).length === 0) {
+      fetchMyPosts();
+    }
+    
+    // 【追加】ふぁぼタブに切り替えたとき
+    if (currentTab === 'likes' && Object.keys(receivedLikesEvents).length === 0) {
+      fetchReceivedLikes();
+    }
+  });
+});
+
+// ログイン済みなら自動で取得（既存のコードを修正）
+if (window.nostrAuth.isLoggedIn()) {
+  fetchMyPosts();
+  fetchReceivedLikes(); // 【追加】
+}
 });
 
  /**
@@ -1057,6 +1094,65 @@ async function fetchMyPosts() {
  ws.onclose = () => {
  console.log('マイポスト取得用WebSocket切断');
  };
+}
+
+ /**
+ * 自分の投稿に対して受け取ったkind:7（ふぁぼ）を取得
+ */
+async function fetchReceivedLikes() {
+  if (!window.nostrAuth.isLoggedIn()) {
+    console.log('ログインしていないため、ふぁぼを取得できません');
+    return;
+  }
+  
+  const myPubkey = window.nostrAuth.pubkey;
+  const currentRelay = relayUrlInput.value;
+  
+  console.log('受け取ったふぁぼを取得中...', myPubkey);
+  
+  const ws = new WebSocket(currentRelay);
+  
+  ws.onopen = () => {
+    console.log('ふぁぼ取得用WebSocket接続成功');
+    
+    // 自分宛のkind:7を取得（pタグで自分を指定しているもの）
+    ws.send(JSON.stringify(['REQ', 'received-likes-sub', {
+      kinds: [7],
+      '#p': [myPubkey],
+      limit: 100 // 最新100件
+    }]));
+  };
+  
+  ws.onmessage = (ev) => {
+    const [type, subId, event] = JSON.parse(ev.data);
+    
+    if (type === 'EVENT' && subId === 'received-likes-sub') {
+      // kind:7イベントを保存
+      receivedLikesEvents[event.id] = event;
+      
+      // プロファイル取得（送信者の名前を表示するため）
+      if (!profiles[event.pubkey]) {
+        fetchProfilesForPubkeys([event.pubkey]);
+      }
+      
+    } else if (type === 'EOSE' && subId === 'received-likes-sub') {
+      console.log(`受け取ったふぁぼを${Object.keys(receivedLikesEvents).length}件取得しました`);
+      ws.close();
+      
+      // ふぁぼタブを表示中なら再描画
+      if (currentTab === 'likes') {
+        refreshTimeline();
+      }
+    }
+  };
+  
+  ws.onerror = (err) => {
+    console.error('ふぁぼ取得エラー:', err);
+  };
+  
+  ws.onclose = () => {
+    console.log('ふぁぼ取得用WebSocket切断');
+  };
 }
 
 sendPostButton.addEventListener("click", sendeNewPost);

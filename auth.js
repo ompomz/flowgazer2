@@ -6,24 +6,42 @@ class NostrAuth {
     this.useNIP07 = false;
   }
 
-  // npubでログイン（閲覧専用）
-loginWithNpub(npub) {
+// npubまたはNIP-05でログイン（閲覧専用）
+async loginWithNpub(input) {
   try {
-    const decoded = NostrTools.nip19.decode(npub);
-    if (decoded.type !== 'npub') {
-      throw new Error('無効なnpubです');
+    // NIP-05形式かチェック（xxx@domain.com）
+    if (input.includes('@')) {
+      console.log('NIP-05アドレスを解決中...');
+      const [name, domain] = input.split('@');
+      
+      const response = await fetch(`https://${domain}/.well-known/nostr.json?name=${name}`);
+      const data = await response.json();
+      
+      if (!data.names || !data.names[name]) {
+        throw new Error('NIP-05アドレスが見つかりませんでした');
+      }
+      
+      this.pubkey = data.names[name];
+      console.log('NIP-05解決成功:', this.pubkey);
+    } else {
+      // npub形式
+      const decoded = NostrTools.nip19.decode(input);
+      if (decoded.type !== 'npub') {
+        throw new Error('無効なnpubです');
+      }
+      this.pubkey = decoded.data;
     }
-    this.pubkey = decoded.data;
-    this.nsec = null; // 秘密鍵なし
+    
+    this.nsec = null;
     this.useNIP07 = false;
-    this.readOnly = true; // 閲覧専用フラグ
+    this.readOnly = true;
     this.save();
     return this.pubkey;
   } catch (error) {
-    throw new Error('無効なnpub形式です: ' + error.message);
+    throw new Error('無効な形式です: ' + error.message);
   }
 }
-
+  
   // NIP-07でログイン
   async loginWithExtension() {
     if (!window.nostr) {

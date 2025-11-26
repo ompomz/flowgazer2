@@ -196,6 +196,7 @@ const likedEventIds = new Set();
 let hasSubscribedLikes = !1;
 let followingPubkeys = []; // フォロー中のpubkey一覧
 let followingEvents = {}; // フォロータイムラインのイベント
+let originalPosts = {}; // { eventId: event } 元投稿のキャッシュ
 
 /**
  * プロファイル情報から表示名を取得
@@ -724,7 +725,7 @@ function repostEventView(nostrEv) {
 }
 
 /**
- * kind:7（ふぁぼ）イベントの表示
+ * kind:7（ふぁぼ）イベントの表示（元投稿プレビュー付き）
  */
 function likeEventView(likeEvent) {
   const view = baseEventView();
@@ -754,10 +755,51 @@ function likeEventView(likeEvent) {
     link.classList.add('nostr-ref');
     link.textContent = '→ 投稿を見る';
     view.appendChild(link);
+    
+    // 【追加】元投稿のプレビュー表示エリア
+    const previewDiv = document.createElement('div');
+    previewDiv.classList.add('original-post-preview');
+    previewDiv.style.cssText = `
+      margin: 0.5rem 0;
+      padding: 0.5rem;
+      background-color: #f0f0f0;
+      border-left: 3px solid #66b3ff;
+      border-radius: 4px;
+      font-size: 0.85rem;
+      color: #555;
+    `;
+    previewDiv.textContent = '元投稿を読み込み中...';
+    view.appendChild(previewDiv);
+    
+    // 元投稿を取得して表示
+    fetchOriginalPost(targetEventId, (originalEvent) => {
+      if (!originalEvent) {
+        previewDiv.textContent = '元投稿が見つかりませんでした';
+        previewDiv.style.color = '#999';
+        return;
+      }
+      
+      // 投稿者情報
+      const authorSpan = document.createElement('span');
+      authorSpan.style.cssText = 'font-weight: bold; color: #66b3ff;';
+      authorSpan.textContent = getDisplayName(originalEvent.pubkey);
+      
+      // 投稿内容（150文字まで）
+      const contentSpan = document.createElement('span');
+      const content = originalEvent.content.length > 150 
+        ? originalEvent.content.substring(0, 150) + '...' 
+        : originalEvent.content;
+      contentSpan.textContent = ': ' + content;
+      
+      // プレビューを更新
+      previewDiv.innerHTML = '';
+      previewDiv.appendChild(authorSpan);
+      previewDiv.appendChild(contentSpan);
+    });
   }
   
   return view;
-}
+} 
 
 async function sendLikeEvent(targetEventId, targetPubkey) {
  if (!window.nostrAuth.canWrite()) { // ← isLoggedIn() から変更
@@ -1190,11 +1232,15 @@ document.querySelectorAll('.tab-button').forEach(btn => {
       fetchMyPosts();
     }
     
-    // ふぁぼタブ
-    if (currentTab === 'likes' && Object.keys(receivedLikesEvents).length === 0) {
-      fetchReceivedLikes();
-    }
-    
+   // ふぁぼタブ
+   if (currentTab === 'likes') {
+     if (Object.keys(receivedLikesEvents).length === 0) {
+       fetchReceivedLikes();
+     } else {
+        // 【追加】元投稿をバッチ取得
+       fetchAllOriginalPosts();
+     }
+   }    
     // フォロータブ
     if (currentTab === 'following') {
       if (followingPubkeys.length === 0) {
@@ -1478,6 +1524,66 @@ async function fetchFollowingTimeline() {
     console.log('フォロータイムライン取得用WebSocket切断');
   };
 }
+
+/**
+ * kind:7が参照している元投稿（kind:1）を取得
+ */
+async function fetchOriginalPost(eventId, callback) {
+  // キャッシュにあればすぐ返す
+  if (originalPosts[eventId]) {
+    if (callback) callback(originalPosts[eventId]);
+    return;
+  }
+  
+  const currentRelay = relayUrlInput.value;
+  console.log(`元投稿を取得中: ${eventId.substring(0, 8)}...`);
+  
+  const ws = new WebSocket(currentRelay);
+  let timeoutId;
+  
+  ws.onopen = () => {
+    ws.send(JSON.stringify(['REQ', 'original-post-' + Date.now(), {
+      kinds: [1],
+      ids: [eventId],
+      limit: 1
+    }]));
+    
+    // 5秒でタイムアウト
+    timeoutId = setTimeout(() => {
+      console.warn(`元投稿の取得がタイムアウト: ${eventId.substring(0, 8)}...`);
+      ws.close();
+    }, 5000);
+  };
+  
+  ws.onmessage = (ev) => {
+    const [type, , event] = JSON.parse(ev.data);
+
+   if (type === 'EVENT' && event.kind === 1) {
+  // キャッシュに保存
+  originalPosts[event.id] = event;
+  console.log(`元投稿を取得: ${event.id.substring(0, 8)}...`);
+  if (!profiles[event.pubkey]) {
+    fetchProfilesForPubkeys([event.pubkey], () => {
+      if (callback) callback(event);
+    });
+  }  
+  if (callback) callback(event);  
+} else if (type === 'EOSE') {
+  clearTimeout(timeoutId);
+  ws.close();
+}
+  
+  };
+  
+  ws.onerror = () => {
+    clearTimeout(timeoutId);
+    ws.close();
+  };
+  
+  ws.onclose = () => {
+    clearTimeout(timeoutId);
+  };
+}
  
 sendPostButton.addEventListener("click", sendeNewPost);
 postContentInput.addEventListener('keydown', (e) => {
@@ -1620,6 +1726,48 @@ document.getElementById('load-follows').addEventListener('click', async () => {
   hexFilterInput.value = followingPubkeys.join('\n');
   alert(`${followingPubkeys.length}人のフォローを読み込みました`);
 });
+
+/**
+ * ふぁぼタブ表示時に、全ての元投稿をまとめて取得
+ */
+function fetchAllOriginalPosts() {
+  const likeEvents = Object.values(receivedLikesEvents);
+  const eventIdsToFetch = likeEvents
+    .map(like => like.tags.find(t => t[0] === 'e')?.[1])
+    .filter(id => id && !originalPosts[id]); // 未取得のもののみ
+  
+  if (eventIdsToFetch.length === 0) return;
+  
+  console.log(`元投稿をバッチ取得: ${eventIdsToFetch.length}件`);
+  
+  const ws = new WebSocket(relayUrlInput.value);
+  
+  ws.onopen = () => {
+    ws.send(JSON.stringify(['REQ', 'batch-original-posts', {
+      kinds: [1],
+      ids: eventIdsToFetch,
+      limit: eventIdsToFetch.length
+    }]));
+  };
+  
+  ws.onmessage = (ev) => {
+    const [type, , event] = JSON.parse(ev.data);
+    
+    if (type === 'EVENT' && event.kind === 1) {
+      originalPosts[event.id] = event;
+      
+      // プロファイル取得
+      if (!profiles[event.pubkey]) {
+        fetchProfilesForPubkeys([event.pubkey]);
+      }
+    } else if (type === 'EOSE') {
+      console.log('元投稿のバッチ取得完了');
+      ws.close();
+      refreshTimeline(); // 取得完了後に再描画
+    }
+  };
+} 
+ 
 </script> 
 <div id="tutorial-overlay">
  <div id="tutorial-modal">

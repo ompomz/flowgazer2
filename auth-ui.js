@@ -44,9 +44,9 @@ panel.innerHTML = `
     <button id="nsec-login" class="container-button" style="margin-bottom: 0.5rem;">
       🔑 nsec（ツイート&ふぁぼ可）
     </button>    
-    <hr style="margin: 1rem 0; border: none; border-top: 1px solid #ddd;">    
-    <input type="text" id="npub-input" placeholder="npub1..." 
-      style="margin: 0.5rem 0; width: 100%;">
+    <hr style="margin: 1rem 0; border: none; border-top: 1px solid #ddd;">
+    <input type="text" id="npub-input" placeholder="npub1... or name@domain.com" 
+    style="margin: 0.5rem 0; width: 100%;">
     <button id="npub-login" class="container-button">
       👀 npub（フォローリスト取得可）
     </button>

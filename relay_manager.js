@@ -213,4 +213,3 @@ class RelayManager {
 
 // グローバルインスタンス
 window.relayManager = new RelayManager();
-console.log('✅ RelayManager初期化完了');

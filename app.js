@@ -22,7 +22,7 @@ class FlowgazerApp {
 
     // デフォルトリレーに接続
     const savedRelay = localStorage.getItem('relayUrl');
-    const defaultRelay = 'wss://r.kojira.io';
+    const defaultRelay = 'wss://r.kojira.io/';
     const relay = savedRelay || defaultRelay;
 
     await this.connectRelay(relay);

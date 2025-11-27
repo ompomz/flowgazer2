@@ -5,7 +5,6 @@ function createAuthUI() {
     // オーバーレイ要素の作成とスタイリング
     const overlay = document.createElement('div');
     overlay.id = 'auth-overlay';
-    // 背景を半透明の黒、背景を少しぼかす設定は維持
     overlay.style.cssText = `
         position: fixed;
         top: 0;
@@ -15,7 +14,7 @@ function createAuthUI() {
         background: rgba(0,0,0,0.5);
         backdrop-filter: blur(5px);
         z-index: 9998;
-        display: none; /* 初期状態では非表示 */
+        display: none;
         justify-content: center;
         align-items: center;
     `;
@@ -30,42 +29,37 @@ function createAuthUI() {
         color: #666;
         font-size: .9rem;
         line-height: 1.3;
+        font-weight: normal;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     `;
 
     // パネルのinnerHTML（コンテンツ）設定
 panel.innerHTML = `
-  <h3 style="margin-bottom: 1rem;">Do you have key?</h3>
-  <div id="auth-status"></div>
-  
-  <!-- ログインしていない時の表示 -->
-  <div id="auth-login" style="display: none;">    
-    <input type="password" id="nsec-input" placeholder="nsec1..." 
-      style="margin: 0.5rem 0; width: 100%;">
-    <button id="nsec-login" class="container-button" style="margin-bottom: 0.5rem;">
+  <h3 id="auth-heading" style="margin-bottom: 1rem;">Do you have key?</h3>
+  <div id="auth-status"></div>  
+  <div id="auth-login" style="display: none;">
+      <button id="nip07-login" class="container-button" style="margin-bottom: 0.5rem; white-space: nowrap; font-size: 0.8rem; font-weight: bold; padding: 0.25rem 1rem; margin: 0.5rem 0; border: none; border-radius: 999px; background-color: #e0f2f1; color: #00796b; cursor: pointer;">
+      🔐 NIP-07（ツイート&ふぁぼ可）
+    </button>
+    <input type="password" id="nsec-input" placeholder="nsec1..."  
+      style="margin: 0.5rem 0; width: 100%; transition: background-color 0.3s, color 0.3s; cursor: pointer; font-size: 0.9rem; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; color: #666; background-color: #fff;">
+    <button id="nsec-login" class="container-button" style="margin-bottom: 0.5rem; white-space: nowrap; font-size: 0.8rem; font-weight: bold; padding: 0.25rem 1rem; margin: 0.5rem 0; border: none; border-radius: 999px; background-color: #e0f2f1; color: #00796b; cursor: pointer;">
       🔑 nsec（ツイート&ふぁぼ可）
-    </button>    
-    <hr style="margin: 1rem 0; border: none; border-top: 1px solid #ddd;">
-    <input type="text" id="npub-input" placeholder="npub1... or name@domain.com" 
-    style="margin: 0.5rem 0; width: 100%;">
-    <button id="npub-login" class="container-button">
+    </button>
+    <input type="text" id="npub-input" placeholder="npub1... or name@domain.com"  
+      style="margin: 0.5rem 0; width: 100%; transition: background-color 0.3s, color 0.3s; cursor: pointer; font-size: 0.9rem; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; color: #666; background-color: #fff;">
+    <button id="npub-login" class="container-button" style="margin-bottom: 0.5rem; white-space: nowrap; font-size: 0.8rem; font-weight: bold; padding: 0.25rem 1rem; margin: 0.5rem 0; border: none; border-radius: 999px; background-color: #e0f2f1; color: #00796b; cursor: pointer;">
       👀 npub（フォローリスト取得可）
     </button>
     <small style="color: #999; display: block; margin-top: 0.25rem;">
       ※イベントを流す以外のことができます
     </small>
-    <button id="nip07-login" class="container-button" style="margin-bottom: 0.5rem;">
-      🔐 NIP-07（ツイート&ふぁぼ可）
-    </button>
   </div>
-  
-  <!-- ログイン中の表示 -->
   <div id="auth-info" style="display: none;">
-    <p>公開鍵: <span id="auth-npub"></span></p>
-    <p id="auth-mode" style="color: #999; font-size: 0.8rem;"></p>
-    <button id="logout-btn" class="container-button">サインアウト</button>
+    <p><span id="auth-mode" style="color: #999; font-size: 0.8rem;"></span><span>　公開鍵: <span id="auth-npub"></span></span></p>
+    <button id="logout-btn" class="container-button" style="background-color: #e0f2f1; color: #00796b; border-radius: 999px; padding: 0.25rem 1rem; border: none;">サインアウト</button>
   </div>
-  
-  <button id="close-auth" class="container-button" style="margin-top: 1rem;">とじる</button>
+  <button id="close-auth" class="container-button" style="margin-top: 1rem; background-color: #00796b; color: #e0f2f1; border-radius: 999px; padding: 0.25rem 1rem; border: none;">とじる </button>
 `;
 
     // DOMに追加
@@ -84,20 +78,32 @@ panel.innerHTML = `
 /**
  * ログイン状態に基づいて認証UIの表示を更新する関数
  */
+/**
+ * ログイン状態に基づいて認証UIの表示を更新する関数
+ */
 function updateAuthUI() {
   const loginDiv = document.getElementById('auth-login');
   const infoDiv = document.getElementById('auth-info');
   const npubSpan = document.getElementById('auth-npub');
-  const modeSpan = document.getElementById('auth-mode'); // ← 追加
+  const modeSpan = document.getElementById('auth-mode');
+  // ★ 変更点: 見出し要素を取得
+  const authHeading = document.getElementById('auth-heading');
 
   if (window.nostrAuth.isLoggedIn()) {
+    // ログイン済みの場合は、ログインフォーム（と見出し）を非表示
     loginDiv.style.display = 'none';
     infoDiv.style.display = 'block';
+    if (authHeading) {
+      authHeading.style.display = 'none';
+    }
+    
+    // ... (既存のログイン情報の表示ロジック)
     const npub = NostrTools.nip19.npubEncode(window.nostrAuth.pubkey);
     npubSpan.textContent = npub.substring(0, 12) + '...' + npub.slice(-4);
     
     // ログインモードを表示
     if (modeSpan) {
+      // ... (既存のモード表示ロジック)
       if (window.nostrAuth.readOnly) {
         modeSpan.textContent = 'ROM';
         modeSpan.style.color = '#999';
@@ -109,30 +115,41 @@ function updateAuthUI() {
         modeSpan.style.color = '#66b3ff';
       }
     }
-        
-    // 秘密鍵コピーボタンの処理（既存のコード）
+
+    // 秘密鍵コピーボタンの処理
     const existingNsecBtn = document.getElementById('copy-nsec-btn');
     if (window.nostrAuth.nsec && !window.nostrAuth.useNIP07 && !existingNsecBtn) {
+      // ... (既存の秘密鍵コピーボタンのロジック)
       const nsecBtn = document.createElement('button');
       nsecBtn.id = 'copy-nsec-btn';
       nsecBtn.className = 'container-button full-width';
       nsecBtn.textContent = '秘密鍵をコピー';
-      nsecBtn.style.backgroundColor = '#f9c';
+      nsecBtn.style.backgroundColor = '#00796b';
+      nsecBtn.style.color = '#e0f2f1';
       nsecBtn.style.margin = '1rem 0';
+      nsecBtn.style.borderRadius = '999px';
+      nsecBtn.style.padding = '0.25rem 1rem';
+      nsecBtn.style.border = 'none';
       nsecBtn.onclick = () => {
-        navigator.clipboard.writeText(window.nostrAuth.nsec)
-          .then(() => alert('秘密鍵をコピーしました！安全な場所に保存してください。'))
-          .catch(err => alert('コピーに失敗しました: ' + err.message));
+          navigator.clipboard.writeText(window.nostrAuth.nsec)
+              .then(() => alert('秘密鍵をコピーしました！安全な場所に保存してください。'))
+              .catch(err => alert('コピーに失敗しました: ' + err.message));
       };
       const logoutBtn = document.getElementById('logout-btn');
       infoDiv.insertBefore(nsecBtn, logoutBtn);
       logoutBtn.style.marginTop = '0.5rem';
     } else if (existingNsecBtn) {
-      document.getElementById('logout-btn').style.marginTop = '0.5rem';
-    }
+        document.getElementById('logout-btn').style.marginTop = '0.5rem';
+      }
+
   } else {
+    // 未ログインの場合は、ログインフォーム（と見出し）を表示
     loginDiv.style.display = 'block';
     infoDiv.style.display = 'none';
+    if (authHeading) {
+      authHeading.style.display = 'block';
+    }
+
     const nsecBtn = document.getElementById('copy-nsec-btn');
     if (nsecBtn) nsecBtn.remove();
   }

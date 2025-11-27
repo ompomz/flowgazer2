@@ -119,8 +119,23 @@ li.event { padding: 0.5rem; border-top: 1px dashed #ddd;}
 <script src="./app.js"></script>
 
 <script>
+// 初期化確認
+console.log('✅ スクリプト読み込み完了');
+console.log('dataStore:', typeof window.dataStore);
+console.log('relayManager:', typeof window.relayManager);
+console.log('profileFetcher:', typeof window.profileFetcher);
+console.log('Timeline:', typeof window.Timeline);
+console.log('app:', typeof window.app);
+
 // DOMContentLoaded
 document.addEventListener('DOMContentLoaded', async () => {
+  // インスタンスの存在確認
+  if (!window.dataStore) {
+    console.error('❌ dataStoreが初期化されていません');
+    alert('初期化エラー: ページを再読み込みしてください');
+    return;
+  }
+  
   // タイムラインインスタンス作成
   window.timeline = new Timeline(document.getElementById('timeline'));
   

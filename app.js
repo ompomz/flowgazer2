@@ -380,6 +380,7 @@ class FlowgazerApp {
 
 // グローバルインスタンス
 window.app = new FlowgazerApp();
+console.log('✅ FlowgazerApp初期化完了');
 
 // グローバル関数（UI用）
 window.sendLikeEvent = (eventId, pubkey) => window.app.sendLike(eventId, pubkey);

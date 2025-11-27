@@ -20,8 +20,13 @@ class DataStore {
     // リアクションカウント
     this.reactionCounts = new Map(); // eventId -> { reposts: 0, reactions: 0 }
 
-    // その他
-    this.oldestTimestamp = Date.now() / 1000; // もっと見る用
+    // タブ別の最古タイムスタンプ
+    this.oldestTimestamps = {
+      global: Date.now() / 1000,
+      following: Date.now() / 1000,
+      myposts: Date.now() / 1000,
+      likes: Date.now() / 1000
+    };
   }
 
   /**
@@ -42,15 +47,42 @@ class DataStore {
     // 保存
     this.events.set(event.id, event);
 
-    // タイムスタンプ更新
-    if (event.created_at < this.oldestTimestamp) {
-      this.oldestTimestamp = event.created_at;
-    }
-
     // カテゴリ分け
     this.categorizeEvent(event);
 
+    // タブ別の最古タイムスタンプを更新
+    this.updateOldestTimestamps(event);
+
     return true;
+  }
+
+  /**
+   * タブ別の最古タイムスタンプを更新
+   */
+  updateOldestTimestamps(event) {
+    const myPubkey = window.nostrAuth?.pubkey;
+
+    // kind:1, 6のみ対象
+    if (event.kind !== 1 && event.kind !== 6) return;
+
+    // グローバル
+    if (event.created_at < this.oldestTimestamps.global) {
+      this.oldestTimestamps.global = event.created_at;
+    }
+
+    // フォロー中
+    if (this.followingPubkeys.has(event.pubkey)) {
+      if (event.created_at < this.oldestTimestamps.following) {
+        this.oldestTimestamps.following = event.created_at;
+      }
+    }
+
+    // 自分の投稿
+    if (event.kind === 1 && event.pubkey === myPubkey) {
+      if (event.created_at < this.oldestTimestamps.myposts) {
+        this.oldestTimestamps.myposts = event.created_at;
+      }
+    }
   }
 
   /**
@@ -219,6 +251,13 @@ class DataStore {
   }
 
   /**
+   * タブ別の最古タイムスタンプを取得
+   */
+  getOldestTimestamp(tab) {
+    return this.oldestTimestamps[tab] || Date.now() / 1000;
+  }
+
+  /**
    * ふぁぼ済みかチェック
    */
   isLikedByMe(eventId) {
@@ -236,7 +275,13 @@ class DataStore {
     this.followingPubkeys.clear();
     this.likedByMeIds.clear();
     this.reactionCounts.clear();
-    this.oldestTimestamp = Date.now() / 1000;
+    const now = Date.now() / 1000;
+    this.oldestTimestamps = {
+      global: now,
+      following: now,
+      myposts: now,
+      likes: now
+    };
     console.log('🗑️ データストアをクリアしました');
   }
 

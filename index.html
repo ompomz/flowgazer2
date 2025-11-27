@@ -7,18 +7,22 @@
 <link rel="icon" type="image/x-icon" href="https://ompomz.github.io/flowgazer/favicon.ico">
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box;}
-body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; padding: 0.5rem; line-height: 1.3; background-color: #f7f7f7; color: #666; font-size: 0.9rem;}
+body {font-weight: normal; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; padding: 0.5rem; line-height: 1.3; background-color: #f7f7f7; color: #666; font-size: 0.9rem;}
 .container { max-width: 600px; margin-left: 0.5rem; margin-right: auto; padding: 0.5rem;}
+a {color: #666; text-decoration: none;}
 h1 { font-size: 1.2rem; margin-bottom: 0.5rem;}
-input, textarea { font-size: 0.9rem; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; color: #666; background-color: #fff;}
+input, textarea {transition: background-color 0.3s, color 0.3s; cursor: pointer; font-size: 0.9rem; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; color: #666; background-color: #fff;}
+input[type="checkbox"] { padding: 0; margin: 0; vertical-align: middle; appearance: checkbox; -webkit-appearance: checkbox;}
 textarea { resize: vertical;}
-.container button { font-size: 0.8rem; font-weight: bold; padding: 0.25rem 1rem; margin: 0.5rem 0; border: none; border-radius: 999px; color: #fff; background-color: #666; cursor: pointer;}
+.container button {white-space: nowrap; font-size: 0.8rem; font-weight: bold; padding: 0.25rem 1rem; margin: 0.5rem 0; border: none; border-radius: 999px; color: #fff; background-color: #666; cursor: pointer;}
 .full-width { width: 100%;}
 .flex-container { display: flex; align-items: center; gap: 0.5rem; margin: 0.5rem 0;}
 .flex-container input { flex-grow: 1; margin: 0;}
+.flex-container input, .flex-container textarea { flex-grow: 1; margin: 0;}
 .flex-container button { margin: 0;}
 ul { list-style: none; padding: 0; margin: 0.5rem 0;}
-li.event { padding: 0.5rem; border-top: 1px dashed #ddd;}
+li.event {word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd;}
+.post-content{display:inline}
 .event-liked { border-right: 0.3rem solid #ffd700;}
 .npub-link { color: #66b3ff;}
 .nostr-ref, .pubkey-ref { color: #66b3ff; text-decoration: none;}
@@ -28,10 +32,28 @@ li.event { padding: 0.5rem; border-top: 1px dashed #ddd;}
 #load-more.loading::before { content: "読み込み中...";}
 #generate-trial-keypair { background-color: #ff99cc;}
 #send-new-post { background-color: #ffcc66;}
-#subscribe-relay, #apply-filter, #clear-filter { background-color: #ffd700;}
+#subscribe-relay, #apply-filter, #clear-filter, #load-follows { background-color: #ffd700;}
 #show-settings, #hide-settings { background-color: #999; font-size: 0.7rem; padding: 0.2rem 1rem; margin: 0;}
 .hidden { display: none;}
 @media (max-width: 767px) { .container { max-width: 100%; padding: 8px; margin: 0;} }
+#tutorial-overlay{position:fixed;top:0;left:0;width:100%;height:100%;justify-content:center;align-items:center;z-index:9999;background-color:rgba(247,247,247,.5);display:none;backdrop-filter:blur(5px);transition:all 0.5s ease-in-out}
+#tutorial-modal{background-color:rgba(255,255,255,.8);padding:1.2rem 1.2rem .5rem 1.2rem;border-radius:.6rem;max-width:600px;width:80%;max-height:90vh;overflow-y:auto;box-shadow:0 4px 20px rgba(0,0,0,.2);transition:all 0.5s ease-in-out;position:relative}
+#image-container{text-align:center;margin-bottom:.5rem}
+.tutorial-image{display:none;max-width:100%;height:auto}
+.tutorial-image.active{display:block}
+#tutorial-navigation{display:flex;justify-content:space-between;margin:.5rem 0rem 0rem 0rem}
+#prev-button,#next-button{width:2rem;height:2rem;display:inline-flex;align-items:center;justify-content:center;font-size:1rem;font-weight:700;color:rgba(224,242,241,1);background-color:rgba(0,121,107,.7);border:none;border-radius:50%;cursor:pointer;transition:background-color 0.3s ease,transform 0.2s ease}
+#prev-button:hover,#next-button:hover{background-color:rgba(0,121,107,.9)}
+#tutorial-close-button{position:absolute;top:.5rem;right:.5rem;font-size:.9rem;font-weight:700;color:#e0f2f1;background-color:#00796b;padding:.25rem .5rem;border-radius:999px;cursor:pointer;border:none;z-index:10000;white-space:nowrap;transition:background-color 0.3s}
+#tutorial-close-button:hover{background-color:rgba(0,121,107,.7)}
+.dot-navigation{text-align:center}
+.dot{height:1rem;width:1rem;background-color:#e0f2f1;border-radius:50%;display:inline-block;margin:0 5px;cursor:pointer;transition:background-color 0.3s ease}
+.dot.active{background-color:#00796b}
+.modal{display:none;position:fixed;z-index:1;left:0;top:0;width:100%;height:100%;overflow:auto;background-color:rgba(0,0,0,.2);backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px)}
+.modal-content{margin:auto;display:block;max-width:80%;max-height:80vh;width:80%}
+.modal-image{width:auto;height:auto;max-width:100%;max-height:100%;object-fit:contain;display:block;margin:auto}
+.close-button{color:#fff;font-size:40px;font-weight:700;cursor:pointer;transition:0.3s}
+.close-button:hover,.close-button:focus{color:#eee;text-decoration:none;cursor:pointer}
 </style>
 </head>
 <body>
@@ -44,14 +66,13 @@ li.event { padding: 0.5rem; border-top: 1px dashed #ddd;}
  <button onclick="showAuthUI()" style="color: #00796b; background-color: #e0f2f1; padding: 0.25rem 1rem;">すでに鍵をお持ちの方</button>
 </div>
 
-<p>新設計版。タイムラインを見たり、投稿したり、ふぁぼったりできるよ。</p>
+<p>新設計版！タイムラインを見たり、投稿したり、ふぁぼったりできるよ。作ったのはClaude。</p>
 
 <button id="generate-trial-keypair" class="full-width" onclick="generateAndLoginWithNewKeypair()">
   新しい鍵ペアを生成して試す！
 </button>
 
 <div style="display: flex; align-items: center; gap: 0.5rem; margin: 0.5rem 0;">
- <span style="white-space: nowrap;">　</span>
  <a id="npub-link" class="npub-link" target="_blank" style="display: none;"></a>
  <span id="not-logged-in" style="color: #999;">見るだけモード</span>
 </div>
@@ -66,8 +87,17 @@ li.event { padding: 0.5rem; border-top: 1px dashed #ddd;}
 
 <div id="advanced-settings" class="hidden">
   <div class="flex-container">
-    <input id="relay-url" type="text">
-    <button id="subscribe-relay">接続</button>
+    <input id="relay-url" type="text" list="relay-suggestions">
+   <datalist id="relay-suggestions">
+    <option value="wss://r.kojira.io/">
+    <option value="wss://yabu.me/">
+    <option value="wss://nostr.compile-error.net/">
+    <option value="wss://relay-jp.nostr.wirednet.jp/">
+    <option value="wss://relay.damus.io">
+    <option value="wss://nos.lol/">
+    <option value="wss://relay.nostr.band">
+   </datalist>
+   <button id="subscribe-relay">接続</button>
   </div>
   
   <div style="display: flex; align-items: center; gap: 0.5rem; margin-left: 0.25rem;">
@@ -78,7 +108,7 @@ li.event { padding: 0.5rem; border-top: 1px dashed #ddd;}
     <input type="checkbox" id="filter-flowgazer-only">
     
     <label for="kind-7-content-input" style="margin-left: 1rem;">ふぁぼマーク</label>
-    <input id="kind-7-content-input" type="text" maxlength="1" value="⭐" style="width: 2rem; text-align: center;">
+    <input id="kind-7-content-input" type="text" maxlength="1" value="⭐" style="width: 2.5rem; text-align: center; font-size: 0.8rem;">
   </div>
   
   <div class="flex-container">
@@ -92,14 +122,14 @@ li.event { padding: 0.5rem; border-top: 1px dashed #ddd;}
 </div>
 
 <div id="tab-buttons" style="display: flex; gap: 0.5rem; margin: 0.5rem 0;">
-  <button id="tab-global" class="tab-button active">グローバル</button>
+  <button id="tab-global" class="tab-button active">みんな</button>
   <button id="tab-following" class="tab-button">フォロー</button>
   <button id="tab-myposts" class="tab-button">自分</button>
   <button id="tab-likes" class="tab-button">ふぁぼられ</button>
 </div>
 
 <ul id="timeline"></ul>
-<button id="load-more" class="full-width">もっと見る</button>
+<button id="load-more" class="full-width" style="margin: 0.1rem 0;">もっと見る</button>
 
 </div>
 
@@ -107,8 +137,8 @@ li.event { padding: 0.5rem; border-top: 1px dashed #ddd;}
 <script src="https://ompomz.github.io/header/loadHeader.js"></script>
 <script src="https://ompomz.github.io/modal.js"></script>
 <script src="https://ompomz.github.io/flowgazer/tutorial.js"></script>
-<script src="./auth.js"></script>
-<script src="./auth-ui.js"></script>
+<script src="https://ompomz.github.io/flowgazer2/auth.js"></script>
+<script src="https://ompomz.github.io/flowgazer2/auth-ui.js"></script>
 <script src="https://unpkg.com/nostr-tools@2.17.0/lib/nostr.bundle.js"></script>
 
 <!-- 新設計JS -->
@@ -207,7 +237,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // フォローリスト読み込み
   document.getElementById('load-follows').addEventListener('click', () => {
     if (!window.nostrAuth.isLoggedIn()) {
-      alert('ログインが必要です');
+      alert('鍵の入力が必要です');
       showAuthUI();
       return;
     }

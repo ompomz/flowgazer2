@@ -150,7 +150,26 @@ class ViewState {
       .map(id => window.dataStore.events.get(id))
       .filter(Boolean);
 
-    // flowgazerしぼりこみ
+    // 禁止ワードフィルター
+    if ((tab === 'global' || tab === 'following') && window.app?.forbiddenWords?.length > 0) {
+      events = events.filter(ev => {
+        if (ev.kind !== 1) return true; // kind:1以外はスルー
+        const content = ev.content.toLowerCase(); // 大文字小文字を無視
+        return !window.app.forbiddenWords.some(word => 
+          content.includes(word.toLowerCase())
+        );
+      });
+    }
+
+    // globalとfollowingタブでkind:1の字数制限
+    if (tab === 'global' || tab === 'following') {
+      events = events.filter(ev => {
+        if (ev.kind !== 1) return true; // kind:1以外はスルー
+        return ev.content.length <= 190; // 例：190字まで
+      });
+    }
+
+      // flowgazerしぼりこみ
     if (filterOptions.flowgazerOnly && tab !== 'likes') {
       events = events.filter(ev => 
         ev.kind === 1 && 

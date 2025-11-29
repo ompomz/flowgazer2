@@ -11,6 +11,8 @@ class FlowgazerApp {
     this.flowgazerOnly = false;
     this.myPostsHistoryFetched = false;
     this.receivedLikesFetched = false;
+    this.forbiddenWords = [];
+
   }
 
   /**
@@ -39,6 +41,8 @@ class FlowgazerApp {
 
     console.log('✅ flowgazer起動完了');
   }
+
+
 
   /**
    * リレーに接続
@@ -406,19 +410,20 @@ class FlowgazerApp {
   /**
    * 禁止ワードリスト取得
    */
-  async fetchForbiddenWords() {
-    try {
-      const response = await fetch('https://ompomz.github.io/flowgazer/nglist.xml');
-      const xmlText = await response.text();
-      const parser = new DOMParser();
-      const xmlDoc = parser.parseFromString(xmlText, 'text/xml');
-      const terms = xmlDoc.querySelectorAll('term');
-      this.forbiddenWords = Array.from(terms).map(node => node.textContent);
-      console.log('📋 禁止ワードリスト読み込み完了');
-    } catch (err) {
-      console.error('禁止ワードリスト読み込み失敗:', err);
-    }
-  }
+    async fetchForbiddenWords() {
+      try {
+        const response = await fetch('https://ompomz.github.io/flowgazer/nglist.xml');
+        const xmlText = await response.text();
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(xmlText, 'text/xml');
+        const terms = xmlDoc.querySelectorAll('term');
+        this.forbiddenWords = Array.from(terms).map(node => node.textContent);
+        console.log('📋 禁止ワードリスト読み込み完了:', this.forbiddenWords.length, '件');
+      } catch (err) {
+        console.error('禁止ワードリスト読み込み失敗:', err);
+        this.forbiddenWords = []; // エラー時は空配列
+      }
+    }  
 
   /**
    * 鍵入力UI更新

@@ -9,7 +9,6 @@ class FlowgazerApp {
     this.isAutoUpdate = true;
     this.filterAuthors = null;
     this.flowgazerOnly = false;
-    this.maxContentLength = 200;
     this.myPostsHistoryFetched = false;
     this.receivedLikesFetched = false;
   }
@@ -126,11 +125,6 @@ class FlowgazerApp {
         } catch (err) {
           console.error('プロファイルパースエラー:', err);
         }
-        return;
-      }
-
-      if (event.kind === 1 && event.content.length > this.maxContentLength) {
-        console.log(`📏 文字数超過のためスキップ: ${event.content.length}文字`);
         return;
       }
 
@@ -273,7 +267,6 @@ class FlowgazerApp {
 
     // タイムライン更新
     window.timeline.switchTab(tab);
-    window.viewState.renderNow();
   }
 
   /**
@@ -321,11 +314,6 @@ class FlowgazerApp {
 
     window.relayManager.subscribe('load-more', filter, (type, event) => {
       if (type === 'EVENT') {
-        if (event.kind === 1 && event.content.length > this.maxContentLength) {
-          console.log(`📏 文字数超過のためスキップ: ${event.content.length}文字`);
-          return;
-        }
-        
         if (window.dataStore.addEvent(event)) {
           window.viewState.addEvent(event, this.currentTab);
           window.profileFetcher.request(event.pubkey);
@@ -334,11 +322,7 @@ class FlowgazerApp {
         window.relayManager.unsubscribe('load-more');
         document.getElementById('load-more').classList.remove('loading');
         console.log(`✅ もっと見る完了`);
-        
-        const prevAutoUpdate = this.isAutoUpdate;
-        this.isAutoUpdate = true;
         window.viewState.renderNow();
-        this.isAutoUpdate = prevAutoUpdate;
       }
     });
   }
@@ -371,10 +355,11 @@ class FlowgazerApp {
       window.viewState.addEvent(signed, this.currentTab);
       window.viewState.renderNow();
 
+      alert('投稿しました！');
       document.getElementById('new-post-content').value = '';
 
     } catch (err) {
-      console.error('失敗:', err);
+      console.error('投稿失敗:', err);
       alert('投稿に失敗しました: ' + err.message);
     }
   }
@@ -410,7 +395,7 @@ class FlowgazerApp {
       window.viewState.addEvent(signed, this.currentTab);
       window.viewState.renderNow();
 
-      alert('ふぁぼった!');
+      alert('ふぁぼった！');
 
     } catch (err) {
       console.error('失敗:', err);

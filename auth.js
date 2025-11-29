@@ -49,7 +49,7 @@ async loginWithNpub(input) {
     }
     this.pubkey = await window.nostr.getPublicKey();
     this.useNIP07 = true;
-　  this.readOnly = false; // ← 追加
+    this.readOnly = false; // ← 追加
     this.save();
     return this.pubkey;
   }

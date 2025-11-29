@@ -103,7 +103,7 @@ class DataStore {
         this.receivedLikeIds.add(event.id);
       }
 
-      // 自分がふぁぼったもの
+      // 自分がふぁぼったやつ
       if (event.pubkey === myPubkey) {
         const targetEventId = event.tags.find(t => t[0] === 'e')?.[1];
         if (targetEventId) {

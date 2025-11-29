@@ -35,7 +35,7 @@ function createAuthUI() {
 
     // パネルのinnerHTML（コンテンツ）設定
 panel.innerHTML = `
-  <h3 style="margin-bottom: 1rem;">Do you have key?</h3>
+  <h3 id="auth-heading" style="margin-bottom: 1rem;"></h3>
   <div id="auth-status"></div>  
   <div id="auth-login" style="display: none;">
       <button id="nip07-login" class="container-button" style="margin-bottom: 0.5rem; white-space: nowrap; font-size: 0.8rem; font-weight: bold; padding: 0.25rem 1rem; margin: 0.5rem 0; border: none; border-radius: 999px; background-color: #e0f2f1; color: #00796b; cursor: pointer;">
@@ -79,6 +79,7 @@ panel.innerHTML = `
  * 鍵入力状況に基づいて認証UIの表示を更新する関数
  */
 function updateAuthUI() {
+  const heading = document.getElementById('auth-heading');
   const loginDiv = document.getElementById('auth-login');
   const infoDiv = document.getElementById('auth-info');
   const npubSpan = document.getElementById('auth-npub');
@@ -89,6 +90,8 @@ function updateAuthUI() {
     infoDiv.style.display = 'block';
     const npub = NostrTools.nip19.npubEncode(window.nostrAuth.pubkey);
     npubSpan.textContent = npub.substring(0, 12) + '...' + npub.slice(-4);
+
+    if (heading) heading.textContent = 'enjoy internet!';
     
     // 鍵入力モードを表示
     if (modeSpan) {
@@ -125,12 +128,13 @@ if (window.nostrAuth.nsec && !window.nostrAuth.useNIP07 && !existingNsecBtn) {
     const logoutBtn = document.getElementById('logout-btn');
     infoDiv.insertBefore(nsecBtn, logoutBtn);
     logoutBtn.style.marginTop = '0.5rem';
-} else if (existingNsecBtn) {
+    } else if (existingNsecBtn) {
       document.getElementById('logout-btn').style.marginTop = '0.5rem';
-    }
-  } else {
+      }
+    } else {
     loginDiv.style.display = 'block';
     infoDiv.style.display = 'none';
+    if (heading) heading.textContent = 'Do you have key?';
     const nsecBtn = document.getElementById('copy-nsec-btn');
     if (nsecBtn) nsecBtn.remove();
   }

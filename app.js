@@ -17,14 +17,14 @@ class FlowgazerApp {
    * 初期化
    */
   async init() {
-    console.log('🚀 Flowgazer起動中...');
+    console.log('🚀 flowgazer起動中...');
 
-    // ログイン状態を反映
+    // 鍵入力状況を反映
     this.updateLoginUI();
 
     // デフォルトリレーに接続
     const savedRelay = localStorage.getItem('relayUrl');
-    const defaultRelay = 'wss://r.kojira.io';
+    const defaultRelay = 'wss://r.kojira.io/';
     const relay = savedRelay || defaultRelay;
 
     await this.connectRelay(relay);
@@ -32,12 +32,12 @@ class FlowgazerApp {
     // 禁止ワードリストを取得
     await this.fetchForbiddenWords();
 
-    // ログイン済みなら初期データ取得
+    // 鍵入力済みなら初期データ取得
     if (window.nostrAuth.isLoggedIn()) {
       this.fetchInitialData();
     }
 
-    console.log('✅ Flowgazer起動完了');
+    console.log('✅ flowgazer起動完了');
   }
 
   /**
@@ -113,10 +113,15 @@ class FlowgazerApp {
       if (event.kind === 0) {
         try {
           const profile = JSON.parse(event.content);
-          window.dataStore.addProfile(event.pubkey, {
+          const updated = window.dataStore.addProfile(event.pubkey, {
             ...profile,
             created_at: event.created_at
           });
+          
+          // プロファイル取得完了を通知
+          if (updated) {
+            window.viewState.onProfileFetched(event.pubkey);
+          }
         } catch (err) {
           console.error('プロファイルパースエラー:', err);
         }
@@ -125,13 +130,11 @@ class FlowgazerApp {
 
       // kind:1, 6, 7を追加
       if (window.dataStore.addEvent(event)) {
+        // ViewStateに追加（タブ判定を含む）
+        window.viewState.addEvent(event, this.currentTab);
+        
         // プロファイル取得をリクエスト
         window.profileFetcher.request(event.pubkey);
-
-        // タイムライン更新
-        if (this.isAutoUpdate) {
-          window.timeline.refresh();
-        }
       }
 
     } else if (type === 'EOSE') {
@@ -143,7 +146,7 @@ class FlowgazerApp {
   }
 
   /**
-   * 初期データ取得（ログイン済みユーザー向け）
+   * 初期データ取得（鍵入力済みユーザー向け）
    */
   fetchInitialData() {
     const myPubkey = window.nostrAuth.pubkey;
@@ -165,18 +168,16 @@ class FlowgazerApp {
       }
     });
 
-    // 2. 自分がふぁぼした履歴（これだけはグローバルに影響しないので先に取得）
+    // 2. 自分がふぁぼした履歴
     window.relayManager.subscribe('my-likes', {
       kinds: [7],
       authors: [myPubkey]
     }, (type, event) => {
       if (type === 'EVENT') {
         window.dataStore.addEvent(event);
+        window.viewState.addEvent(event, this.currentTab);
       }
     });
-
-    // 注: 自分の投稿履歴と受け取ったふぁぼは、
-    // 該当タブを開いた時に取得する（後述）
   }
 
   /**
@@ -187,6 +188,8 @@ class FlowgazerApp {
     
     const myPubkey = window.nostrAuth.pubkey;
     
+    console.log('📥 自分の投稿履歴を取得中...');
+    
     // 自分の投稿履歴
     window.relayManager.subscribe('my-posts-history', {
       kinds: [1],
@@ -194,8 +197,13 @@ class FlowgazerApp {
       limit: 100
     }, (type, event) => {
       if (type === 'EVENT') {
-        window.dataStore.addEvent(event);
-        window.timeline.refresh();
+        if (window.dataStore.addEvent(event)) {
+          window.viewState.addEvent(event, this.currentTab);
+          window.profileFetcher.request(event.pubkey);
+        }
+      } else if (type === 'EOSE') {
+        console.log('✅ 自分の投稿履歴取得完了');
+        window.viewState.renderNow();
       }
     });
 
@@ -210,15 +218,21 @@ class FlowgazerApp {
     
     const myPubkey = window.nostrAuth.pubkey;
     
+    console.log('📥 受け取ったふぁぼを取得中...');
+    
     window.relayManager.subscribe('received-likes', {
       kinds: [7],
       '#p': [myPubkey],
       limit: 100
     }, (type, event) => {
       if (type === 'EVENT') {
-        window.dataStore.addEvent(event);
-        window.profileFetcher.request(event.pubkey);
-        window.timeline.refresh();
+        if (window.dataStore.addEvent(event)) {
+          window.viewState.addEvent(event, this.currentTab);
+          window.profileFetcher.request(event.pubkey);
+        }
+      } else if (type === 'EOSE') {
+        console.log('✅ 受け取ったふぁぼ取得完了');
+        window.viewState.renderNow();
       }
     });
 
@@ -247,6 +261,9 @@ class FlowgazerApp {
     // 購読を更新
     window.relayManager.unsubscribe('main-timeline');
     this.subscribeMainTimeline();
+
+    // ViewStateに通知
+    window.viewState.switchTab(tab);
 
     // タイムライン更新
     window.timeline.switchTab(tab);
@@ -297,13 +314,15 @@ class FlowgazerApp {
 
     window.relayManager.subscribe('load-more', filter, (type, event) => {
       if (type === 'EVENT') {
-        window.dataStore.addEvent(event);
-        window.profileFetcher.request(event.pubkey);
-        window.timeline.refresh();
+        if (window.dataStore.addEvent(event)) {
+          window.viewState.addEvent(event, this.currentTab);
+          window.profileFetcher.request(event.pubkey);
+        }
       } else if (type === 'EOSE') {
         window.relayManager.unsubscribe('load-more');
         document.getElementById('load-more').classList.remove('loading');
         console.log(`✅ もっと見る完了`);
+        window.viewState.renderNow();
       }
     });
   }
@@ -331,9 +350,10 @@ class FlowgazerApp {
       const signed = await window.nostrAuth.signEvent(event);
       window.relayManager.publish(signed);
 
-      // 即座にタイムラインに追加
+      // 即座にDataStoreとViewStateに追加
       window.dataStore.addEvent(signed);
-      window.timeline.refresh();
+      window.viewState.addEvent(signed, this.currentTab);
+      window.viewState.renderNow();
 
       alert('投稿しました！');
       document.getElementById('new-post-content').value = '';
@@ -372,7 +392,8 @@ class FlowgazerApp {
 
       // 即座に反映
       window.dataStore.addEvent(signed);
-      window.timeline.refresh();
+      window.viewState.addEvent(signed, this.currentTab);
+      window.viewState.renderNow();
 
       alert('ふぁぼった！');
 
@@ -400,7 +421,7 @@ class FlowgazerApp {
   }
 
   /**
-   * ログインUI更新
+   * 鍵入力UI更新
    */
   updateLoginUI() {
     const notLoggedInSpan = document.getElementById('not-logged-in');
@@ -421,7 +442,7 @@ class FlowgazerApp {
 
 // グローバルインスタンス
 window.app = new FlowgazerApp();
-console.log('✅ FlowgazerApp初期化完了');
+console.log('✅ flowgazerApp初期化完了');
 
 // グローバル関数（UI用）
 window.sendLikeEvent = (eventId, pubkey) => window.app.sendLike(eventId, pubkey);

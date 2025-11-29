@@ -15,7 +15,7 @@ class DataStore {
     this.myPostIds = new Set();           // 自分の投稿
     this.receivedLikeIds = new Set();     // 自分が受け取ったkind:7
     this.followingPubkeys = new Set();    // フォロー中のpubkey
-    this.likedByMeIds = new Set();        // 自分がふぁぼした投稿ID
+    this.likedByMeIds = new Set();        // 自分がふぁぼった投稿ID
 
     // リアクションカウント
     this.reactionCounts = new Map(); // eventId -> { reposts: 0, reactions: 0 }
@@ -103,7 +103,7 @@ class DataStore {
         this.receivedLikeIds.add(event.id);
       }
 
-      // 自分がふぁぼした
+      // 自分がふぁぼったもの
       if (event.pubkey === myPubkey) {
         const targetEventId = event.tags.find(t => t[0] === 'e')?.[1];
         if (targetEventId) {

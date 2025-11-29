@@ -33,18 +33,19 @@ class Timeline {
    * タイムラインを再描画
    */
   refresh() {
+    // 自動更新がOFFなら何もしない
+    if (!window.app?.isAutoUpdate) {
+      console.log('⏸️ 自動更新OFF: 描画スキップ');
+      return;
+    }
+
     // コンテナをクリア
     while (this.container.firstChild) {
       this.container.removeChild(this.container.firstChild);
     }
 
-    // データを取得
-    let events = window.dataStore.getEventsByTab(this.currentTab, this.filterOptions);
-
-    // 投稿者フィルター
-    if (this.filterOptions.authors && this.filterOptions.authors.length > 0) {
-      events = window.dataStore.filterByAuthors(events, this.filterOptions.authors);
-    }
+    // ViewStateから表示対象を取得
+    const events = window.viewState.getVisibleEvents(this.currentTab, this.filterOptions);
 
     // 描画
     events.forEach(event => {
@@ -139,8 +140,9 @@ class Timeline {
 
     // ふぁぼマーク
     const emoji = document.createElement('span');
-    emoji.textContent = ' ' + (event.content || '⭐') + ' ';
-    emoji.style.cssText = 'font-size: 1.2rem; margin: 0 0.25rem;';
+    const content = (event.content && event.content !== '+') ? event.content : '⭐';
+    emoji.textContent = ' ' + content + ' ';
+    emoji.style.cssText = 'font-size: 1rem; margin: 0 0.25rem;';
     li.appendChild(emoji);
 
     // 対象投稿へのリンク
@@ -412,7 +414,7 @@ class Timeline {
             window.sendLikeEvent(event.id, event.pubkey);
           }
         }
-      }, 800);
+      }, 900);
     };
 
     const cancel = () => clearTimeout(timer);

@@ -6,7 +6,7 @@ class NostrAuth {
     this.useNIP07 = false;
   }
 
-// npubまたはNIP-05でログイン（閲覧専用）
+// npubまたはNIP-05で認証（閲覧専用）
 async loginWithNpub(input) {
   try {
     // NIP-05形式かチェック（xxx@domain.com）
@@ -42,7 +42,7 @@ async loginWithNpub(input) {
   }
 }
   
-  // NIP-07でログイン
+  // NIP-07で認証
   async loginWithExtension() {
     if (!window.nostr) {
       throw new Error('NIP-07拡張機能が見つかりません');
@@ -54,7 +54,7 @@ async loginWithNpub(input) {
     return this.pubkey;
   }
 
-  // nsecでログイン
+  // nsecで認証
   loginWithNsec(nsec) {
     const decoded = NostrTools.nip19.decode(nsec);
     if (decoded.type !== 'nsec') {
@@ -68,7 +68,7 @@ async loginWithNpub(input) {
     return this.pubkey;
   }
 
-  // ログアウト
+  // サインアウト
   logout() {
     this.pubkey = null;
     this.nsec = null;
@@ -114,7 +114,7 @@ canWrite() {
     throw new Error('署名できませんでした');
   }
 
-  // ログイン状態確認
+  // 認証状態確認
   isLoggedIn() {
     return this.pubkey !== null;
   }

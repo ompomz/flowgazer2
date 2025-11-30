@@ -9,8 +9,6 @@ class FlowgazerApp {
     this.isAutoUpdate = true;
     this.filterAuthors = null;
     this.flowgazerOnly = false;
-    this.myPostsHistoryFetched = false;
-    this.receivedLikesFetched = false;
     this.forbiddenWords = [];
 
   }
@@ -187,11 +185,8 @@ class FlowgazerApp {
   /**
    * 自分の投稿履歴を取得（「自分」タブ用）
    */
-  fetchMyPostsHistory() {
-    if (this.myPostsHistoryFetched) return;
-    
-    const myPubkey = window.nostrAuth.pubkey;
-    
+  fetchMyPostsHistory() {    
+    const myPubkey = window.nostrAuth.pubkey;    
     console.log('📥 自分の投稿履歴を取得中...');
     
     // 自分の投稿履歴
@@ -210,16 +205,12 @@ class FlowgazerApp {
         window.viewState.renderNow();
       }
     });
-
-    this.myPostsHistoryFetched = true;
   }
 
   /**
    * 受け取ったふぁぼを取得（「ふぁぼられ」タブ用）
    */
-  fetchReceivedLikes() {
-    if (this.receivedLikesFetched) return;
-    
+  fetchReceivedLikes() {    
     const myPubkey = window.nostrAuth.pubkey;
     
     console.log('📥 受け取ったふぁぼを取得中...');
@@ -227,7 +218,7 @@ class FlowgazerApp {
     window.relayManager.subscribe('received-likes', {
       kinds: [7],
       '#p': [myPubkey],
-      limit: 100
+      limit: 50
     }, (type, event) => {
       if (type === 'EVENT') {
         if (window.dataStore.addEvent(event)) {
@@ -239,8 +230,6 @@ class FlowgazerApp {
         window.viewState.renderNow();
       }
     });
-
-    this.receivedLikesFetched = true;
   }
 
   /**

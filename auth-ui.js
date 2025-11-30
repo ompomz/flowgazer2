@@ -146,7 +146,7 @@ function setupAuthEvents() {
         try {
             await window.nostrAuth.loginWithExtension();
             updateAuthUI();
-            updateLoginUI();
+            window.app.updateLoginUI();
             alert('いけた！');
         } catch (e) {
             alert(e.message);
@@ -159,7 +159,7 @@ function setupAuthEvents() {
         try {
             window.nostrAuth.loginWithNsec(nsec);
             updateAuthUI();
-            updateLoginUI();
+            window.app.updateLoginUI();
             alert('いけた！');
         } catch (e) {
             alert(e.message);
@@ -187,7 +187,7 @@ function setupAuthEvents() {
     document.getElementById('logout-btn').addEventListener('click', () => {
         window.nostrAuth.logout();
         updateAuthUI();
-        updateLoginUI();
+        window.app.updateLoginUI();
         alert('またきてね');
     });
 

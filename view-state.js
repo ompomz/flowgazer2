@@ -103,7 +103,8 @@ class ViewState {
      * @returns {boolean} イベントが追加された場合は true、そうでなければ false
      */
     addHistoryEventToTab(event, tab) {
-        const added = this.addEventToTab(event, tab, true); // true を渡して履歴であることをマーク
+        // isHistory=true を渡すことで、このイベントが履歴取得由来であることをマークする。
+        const added = this.addEventToTab(event, tab, true); 
 
         if (added && tab === this.currentTab) {
             this.scheduleRender();
@@ -124,7 +125,7 @@ class ViewState {
             return false;
         }
 
-        // 1. フィルタリングで弾かれるかチェック
+        // 1. フィルタリングで弾かれるかチェック (ここで自分の投稿が global/following から除外される)
         if (!this._shouldShowInTab(event, tab)) {
             return false;
         }
@@ -162,7 +163,6 @@ class ViewState {
         return true;
     }
 
-
     /**
      * 指定されたイベントが特定のタブに表示されるべきかを判断します。
      * @param {Object} event - Nostrイベント
@@ -182,9 +182,15 @@ class ViewState {
         // 2. タブ固有のフィルタリング
         switch (tab) {
             case 'global':
+                if (event.kind === KIND_TEXT_NOTE && event.pubkey === myPubkey) {
+                    return false;
+                }
                 return event.kind === KIND_TEXT_NOTE || event.kind === KIND_REPOST;
 
             case 'following':
+                if (event.kind === KIND_TEXT_NOTE && event.pubkey === myPubkey) {
+                    return false;
+                }
                 return (event.kind === KIND_TEXT_NOTE || event.kind === KIND_REPOST) &&
                        window.dataStore.followingPubkeys.has(event.pubkey);
 
@@ -215,7 +221,11 @@ class ViewState {
 
         // グローバル/フォロー/自分の投稿の判定
         if (event.kind === KIND_TEXT_NOTE || event.kind === KIND_REPOST) {
-            tabs.push('global'); // グローバルに追加
+            
+            // 自分の投稿でない、または Kind 6 (リポスト) の場合は global に追加
+            if (event.pubkey !== myPubkey || event.kind === KIND_REPOST) {
+                 tabs.push('global'); 
+            }
 
             // フォローしているユーザーの投稿であれば
             if (window.dataStore.followingPubkeys.has(event.pubkey)) {
@@ -326,20 +336,24 @@ class ViewState {
         tabState.pendingEventIds.clear();
         tabState.cursor = null;
 
+        // コンテキストマップから、このタブの履歴フラグを削除 (LoadMoreのイベントもリセット)
+        // 注意: ここで全イベントのコンテキストを操作すると他のタブに影響するため、visibleEventIdsのクリアのみでOK。
+        // addEventToTabで再追加される際にコンテキストが上書きされる。
+
         const allEvents = Array.from(window.dataStore.events.values());
         
         allEvents.forEach(event => {
+            // _shouldShowInTabで自分の投稿(Kind 1)がglobal/followingから除外されるため、
+            // global/followingのcursorは自分の古い投稿に汚染されなくなる。
             if (this._shouldShowInTab(event, tab)) {
-                // コンテキストを更新 (再構築時もコンテキストを記録/再確認)
-                if (!this.eventContext.has(event.id)) {
-                    this.eventContext.set(event.id, {});
-                }
-                this.eventContext.get(event.id)[tab] = true;
-
+                
+                // 1. visibleEventIds に追加
                 tabState.visibleEventIds.add(event.id);
+
+                // 2. カーソルを更新（ページング用）
                 this._updateCursor(tabState, event.created_at);
 
-                // プロフィールがなければ保留リストに追加
+                // 3. プロフィールがなければ保留リストに追加
                 if (!window.dataStore.profiles.has(event.pubkey)) {
                     tabState.pendingEventIds.add(event.id);
                     window.profileFetcher.request(event.pubkey);
@@ -362,42 +376,8 @@ class ViewState {
 
         let events = Array.from(tabState.visibleEventIds)
             .map(id => window.dataStore.events.get(id))
-            .filter(Boolean); // null/undefined を除外
+            .filter(Boolean);
 
-        // -------------------------------------------------------------------
-        // ★★★ 履歴混入防止のためのフィルタリング ★★★
-        // -------------------------------------------------------------------
-        if (tab === 'global' || tab === 'following') {
-            const currentAnchor = this.tabs[tab]?.cursor?.until;
-            
-            // global, followingはライブストリームであり、他の履歴購読（myposts, likes）の
-            // 過去イベントが混入するのを防ぐ
-            events = events.filter(ev => {
-                const context = this.eventContext.get(ev.id);
-                
-                // 1. myposts または likes の履歴として取得されたイベントを除外
-                if (context?.mypostsHistory || context?.likesHistory) {
-                    // ただし、そのイベントが現在のグローバル/フォローの最古のアンカー（currentAnchor）よりも新しい場合は、
-                    // ライブ購読で同時に取得された可能性が高いため、残す。
-                    // これは、メイン購読が myposts/likes の履歴購読より先に動いているという前提に基づく。
-                    // 実際の運用では、履歴として明示的に取得されたイベントは、ライブストリームには含めないのが最も安全。
-                    
-                    // 履歴としてマークされたイベントは、ライブタイムラインでは表示しない
-                    return false;
-                }
-                
-                // 2. フィルタリング後、現在のアンカーより古いイベント（LoadMore対象）を一時的に除外
-                //    これにより、ライブストリームの最初の50/100件の地続きが保証される。
-                //    LoadMoreのイベントは、それ自体のタブ（mypostsなど）でのみ表示されるため、このガードは主に不要だが、
-                //    グローバル購読のイベントの地続き感を保つために、アンカーより古いものは一旦除外しておく。
-                if (currentAnchor && ev.created_at < currentAnchor) {
-                     return false;
-                }
-                
-                return true;
-            });
-        }
-        
         // --- その他のフィルタリング処理（変更なし） ---
 
         // 1. 卑猥な単語フィルタ（global/followingのみ）

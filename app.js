@@ -1,9 +1,9 @@
 class FlowgazerApp {
     constructor() {
         this.currentTab = 'global';
-        this.isAutoUpdate = true; // !0 を true に
+        this.isAutoUpdate = true;
         this.filterAuthors = null;
-        this.flowgazerOnly = false; // !1 を false に
+        this.flowgazerOnly = false;
         this.forbiddenWords = [];
         this.tabDataFetched = {
             global: false,
@@ -45,33 +45,50 @@ class FlowgazerApp {
 
     subscribeMainTimeline() {
         const filters = [];
+        const myPubkey = window.nostrAuth.isLoggedIn() ? window.nostrAuth.pubkey : null;
+
+        // ★ Global フィルタ: 自分を除外
         const globalFilter = {
             kinds: [1, 6],
             limit: 50
         };
 
+        // 著者フィルタが設定されている場合
         if (this.filterAuthors && this.filterAuthors.length > 0) {
             globalFilter.authors = this.filterAuthors;
         }
+
+        // ★ 自分のpubkeyを除外（NIP-01の'#p'タグ方式ではなく、クライアント側でフィルタ）
+        // Relayによっては authors に ! プレフィックスをサポートしていない場合があるため、
+        // 取得後にクライアント側でフィルタリングする方が確実
         filters.push(globalFilter);
 
+        // Following フィルタ
         if (window.dataStore.followingPubkeys.size > 0) {
-            filters.push({
-                kinds: [1, 6],
-                authors: Array.from(window.dataStore.followingPubkeys),
-                limit: 100
-            });
+            const followingAuthors = Array.from(window.dataStore.followingPubkeys);
+            // ★ 自分がフォローリストに含まれていても除外
+            const filteredFollowing = myPubkey 
+                ? followingAuthors.filter(pk => pk !== myPubkey)
+                : followingAuthors;
+
+            if (filteredFollowing.length > 0) {
+                filters.push({
+                    kinds: [1, 6],
+                    authors: filteredFollowing,
+                    limit: 100
+                });
+            }
         }
 
-        if (window.nostrAuth.isLoggedIn()) {
-            const myPubkey = window.nostrAuth.pubkey;
-
+        // Likes フィルタ
+        if (myPubkey) {
             filters.push({
                 kinds: [7],
                 '#p': [myPubkey],
                 limit: 50
             });
 
+            // 自分の投稿へのリアクション
             if (window.dataStore.myPostIds.size > 0) {
                 filters.push({
                     kinds: [6, 7],
@@ -103,6 +120,17 @@ class FlowgazerApp {
                 } catch (err) {
                     console.error('プロファイルパースエラー:', err);
                 }
+                return;
+            }
+
+            // ★ クライアント側で自分の投稿を除外（kind:1のみ、kind:6は通す）
+            const myPubkey = window.nostrAuth.isLoggedIn() ? window.nostrAuth.pubkey : null;
+            if (myPubkey && event.kind === 1 && event.pubkey === myPubkey) {
+                // 自分の投稿は addEvent せず、DataStore 経由で selfFeed に追加される
+                if (window.dataStore.addEvent(event)) {
+                    window.profileFetcher.request(event.pubkey);
+                }
+                // ViewState には追加しない（global/following から除外）
                 return;
             }
 
@@ -140,6 +168,35 @@ class FlowgazerApp {
             if (type === 'EVENT') {
                 window.dataStore.addEvent(event);
                 window.viewState.addEvent(event);
+            }
+        });
+
+        // ★ 初回のみ自分の投稿を取得（selfFeed用）
+        this.fetchMyPostsForSelfFeed();
+    }
+
+    /**
+     * ★ 新規: 自分の投稿を selfFeed に格納（初回のみ）
+     */
+    fetchMyPostsForSelfFeed() {
+        const myPubkey = window.nostrAuth.pubkey;
+        console.log('📥 自分の投稿を selfFeed 用に取得中...');
+
+        window.relayManager.subscribe('self-feed-init', {
+            kinds: [1],
+            authors: [myPubkey],
+            limit: 50
+        }, (type, event) => {
+            if (type === 'EVENT') {
+                // DataStore に追加（selfFeed にも自動追加される）
+                window.dataStore.addEvent(event);
+            } else if (type === 'EOSE') {
+                window.relayManager.unsubscribe('self-feed-init');
+                console.log(`✅ selfFeed 初期化完了: ${window.dataStore.selfFeed.length}件`);
+                // Global タブを再描画
+                if (this.currentTab === 'global' || this.currentTab === 'following') {
+                    window.viewState.renderNow();
+                }
             }
         });
     }
@@ -188,7 +245,7 @@ class FlowgazerApp {
 
     switchTab(tab) {
         this.currentTab = tab;
-        console.log('📑 タブ切り替え:', tab);
+        console.log('🔀 タブ切り替え:', tab);
 
         document.querySelectorAll('.tab-button').forEach(btn => {
             btn.classList.toggle('active', btn.id === `tab-${tab}`);
@@ -254,6 +311,8 @@ class FlowgazerApp {
     }
 
     _buildLoadMoreFilter(tab, untilTimestamp) {
+        const myPubkey = window.nostrAuth.isLoggedIn() ? window.nostrAuth.pubkey : null;
+        
         const filter = {
             until: untilTimestamp - 1,
             limit: 50
@@ -265,6 +324,8 @@ class FlowgazerApp {
                 if (this.filterAuthors && this.filterAuthors.length > 0) {
                     filter.authors = this.filterAuthors;
                 }
+                // ★ 自分を除外する処理はクライアント側で行う
+                // （Relay側で除外するには対応が必要だが、取得後フィルタで十分）
                 break;
             case 'following':
                 if (window.dataStore.followingPubkeys.size === 0) {
@@ -272,7 +333,11 @@ class FlowgazerApp {
                     return null;
                 }
                 filter.kinds = [1, 6];
-                filter.authors = Array.from(window.dataStore.followingPubkeys);
+                // ★ 自分を除外
+                const followingAuthors = Array.from(window.dataStore.followingPubkeys);
+                filter.authors = myPubkey 
+                    ? followingAuthors.filter(pk => pk !== myPubkey)
+                    : followingAuthors;
                 break;
             case 'myposts':
                 if (!window.nostrAuth.isLoggedIn()) {
@@ -280,7 +345,7 @@ class FlowgazerApp {
                     return null;
                 }
                 filter.kinds = [1];
-                filter.authors = [window.nostrAuth.pubkey];
+                filter.authors = [myPubkey];
                 break;
             case 'likes':
                 if (!window.nostrAuth.isLoggedIn()) {
@@ -288,7 +353,7 @@ class FlowgazerApp {
                     return null;
                 }
                 filter.kinds = [7];
-                filter['#p'] = [window.nostrAuth.pubkey];
+                filter['#p'] = [myPubkey];
                 break;
             default:
                 console.error('Unknown tab:', tab);
@@ -300,7 +365,7 @@ class FlowgazerApp {
     async sendPost(content) {
         if (!window.nostrAuth.canWrite()) {
             alert('投稿するには秘密鍵でのサインインが必要です。');
-            showAuthUI(); // この関数はコードスニペットには含まれていませんが、そのまま残します
+            showAuthUI();
             return;
         }
 
@@ -316,9 +381,16 @@ class FlowgazerApp {
 
             const signed = await window.nostrAuth.signEvent(event);
             window.relayManager.publish(signed);
+            
+            // ★ DataStoreに追加（selfFeedにも自動追加される）
             window.dataStore.addEvent(signed);
-            window.viewState.addEvent(signed);
+            
+            // ★ ViewStateには myposts のみ追加
+            window.viewState.addHistoryEventToTab(signed, 'myposts');
+            
+            // ★ 即座に再描画（global/followingで合成表示される）
             window.viewState.renderNow();
+            
             alert('投稿しました!');
             document.getElementById('new-post-content').value = '';
         } catch (err) {
@@ -330,7 +402,7 @@ class FlowgazerApp {
     async sendLike(targetEventId, targetPubkey) {
         if (!window.nostrAuth.canWrite()) {
             alert('ふぁぼるには秘密鍵でのサインインが必要です。');
-            showAuthUI(); // この関数はコードスニペットには含まれていませんが、そのまま残します
+            showAuthUI();
             return;
         }
 

@@ -125,7 +125,7 @@ class ViewState {
             return false;
         }
 
-        // 1. フィルタリングで弾かれるかチェック (ここで自分の投稿が global/following から除外される)
+        // 1. フィルタリングで弾かれるかチェック
         if (!this._shouldShowInTab(event, tab)) {
             return false;
         }
@@ -182,12 +182,14 @@ class ViewState {
         // 2. タブ固有のフィルタリング
         switch (tab) {
             case 'global':
+                // ★ 自分のkind:1は除外（kind:6は含む）
                 if (event.kind === KIND_TEXT_NOTE && event.pubkey === myPubkey) {
                     return false;
                 }
                 return event.kind === KIND_TEXT_NOTE || event.kind === KIND_REPOST;
 
             case 'following':
+                // ★ 自分のkind:1は除外
                 if (event.kind === KIND_TEXT_NOTE && event.pubkey === myPubkey) {
                     return false;
                 }
@@ -222,19 +224,21 @@ class ViewState {
         // グローバル/フォロー/自分の投稿の判定
         if (event.kind === KIND_TEXT_NOTE || event.kind === KIND_REPOST) {
             
-            // 自分の投稿でない、または Kind 6 (リポスト) の場合は global に追加
+            // ★ 自分のkind:1はglobal/followingに追加しない（kind:6は追加する）
             if (event.pubkey !== myPubkey || event.kind === KIND_REPOST) {
                  tabs.push('global'); 
             }
 
             // フォローしているユーザーの投稿であれば
             if (window.dataStore.followingPubkeys.has(event.pubkey)) {
-                tabs.push('following');
+                // ★ 自分のkind:1は除外
+                if (event.pubkey !== myPubkey || event.kind === KIND_REPOST) {
+                    tabs.push('following');
+                }
             }
 
             // 自分の投稿であれば
             if (event.kind === KIND_TEXT_NOTE && event.pubkey === myPubkey) {
-                // ライブストリームで取得した自分の投稿は、mypostsにも追加する
                 tabs.push('myposts');
             }
         }
@@ -336,15 +340,9 @@ class ViewState {
         tabState.pendingEventIds.clear();
         tabState.cursor = null;
 
-        // コンテキストマップから、このタブの履歴フラグを削除 (LoadMoreのイベントもリセット)
-        // 注意: ここで全イベントのコンテキストを操作すると他のタブに影響するため、visibleEventIdsのクリアのみでOK。
-        // addEventToTabで再追加される際にコンテキストが上書きされる。
-
         const allEvents = Array.from(window.dataStore.events.values());
         
         allEvents.forEach(event => {
-            // _shouldShowInTabで自分の投稿(Kind 1)がglobal/followingから除外されるため、
-            // global/followingのcursorは自分の古い投稿に汚染されなくなる。
             if (this._shouldShowInTab(event, tab)) {
                 
                 // 1. visibleEventIds に追加
@@ -365,7 +363,8 @@ class ViewState {
     }
 
     /**
-     * 指定されたタブに表示されるべきイベントを取得し、フィルタリングとソートを行います。
+     * ★ 修正: 指定されたタブに表示されるべきイベントを取得し、フィルタリングとソートを行います。
+     * global/followingの場合は合成フィードを使用。
      * @param {string} tab - タブ名
      * @param {Object} filterOptions - 適用する追加のフィルタオプション
      * @returns {Object[]} フィルタリング・ソート済みのイベントの配列
@@ -374,11 +373,19 @@ class ViewState {
         const tabState = this.tabs[tab];
         if (!tabState) return [];
 
-        let events = Array.from(tabState.visibleEventIds)
-            .map(id => window.dataStore.events.get(id))
-            .filter(Boolean);
+        let events;
 
-        // --- その他のフィルタリング処理（変更なし） ---
+        // ★ global/followingの場合は合成フィードを取得
+        if (tab === 'global' || tab === 'following') {
+            events = window.dataStore.getMergedFeedForTab(tab, filterOptions);
+        } else {
+            // 通常通り取得
+            events = Array.from(tabState.visibleEventIds)
+                .map(id => window.dataStore.events.get(id))
+                .filter(Boolean);
+        }
+
+        // --- その他のフィルタリング処理 ---
 
         // 1. 卑猥な単語フィルタ（global/followingのみ）
         const forbiddenWords = window.app?.forbiddenWords || [];
@@ -414,7 +421,6 @@ class ViewState {
 
         // 5. プロフィール情報が取得済みのイベントのみに絞り込み
         events = events.filter(ev => window.dataStore.profiles.has(ev.pubkey));
-
 
         // --- ソート処理 ---
         // 作成日時 (created_at) の降順でソート（新しいものが先頭）

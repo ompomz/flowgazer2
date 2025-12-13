@@ -1,35 +1,48 @@
 /**
- * timeline.js
- * タイムライン描画ロジック
+ * timeline.js (リファクタリング版)
+ * 【責務】: DOM要素の生成とレンダリングのみ
  */
 
 class Timeline {
   constructor(containerElement) {
     this.container = containerElement;
     this.currentTab = 'global';
+    
+    // フィルターオプション (ViewStateに渡すだけ)
     this.filterOptions = {
       flowgazerOnly: false,
       authors: null
     };
   }
 
+  // ========================================
+  // タブ管理
+  // ========================================
+
   /**
    * タブを切り替え
+   * @param {string} tab
    */
   switchTab(tab) {
     this.currentTab = tab;
-    // ★ DOMを完全にクリアしてから描画
+    
+    // DOMをクリアして再描画
     this.container.innerHTML = '';
     this.refresh();
   }
 
   /**
    * フィルターを設定
+   * @param {Object} options
    */
   setFilter(options) {
     this.filterOptions = { ...this.filterOptions, ...options };
     this.refresh();
   }
+
+  // ========================================
+  // レンダリング
+  // ========================================
 
   /**
    * タイムラインを再描画
@@ -46,7 +59,7 @@ class Timeline {
       this.container.removeChild(this.container.firstChild);
     }
 
-    // ViewStateから表示対象を取得
+    // ViewStateから表示対象を取得 (フィルタリング済み・ソート済み)
     const events = window.viewState.getVisibleEvents(this.currentTab, this.filterOptions);
 
     // 描画
@@ -60,8 +73,14 @@ class Timeline {
     console.log(`📜 タイムライン描画: ${events.length}件 (${this.currentTab})`);
   }
 
+  // ========================================
+  // イベント要素作成
+  // ========================================
+
   /**
    * イベント要素を作成
+   * @param {Object} event
+   * @returns {HTMLElement|null}
    */
   createEventElement(event) {
     switch (event.kind) {
@@ -71,13 +90,42 @@ class Timeline {
         return this.createRepostElement(event);
       case 7:
         return this.createLikeElement(event);
+      case 42:
+        return this.createChannelMessageElement(event);
       default:
         return null;
     }
   }
 
   /**
-   * kind:1（投稿）要素
+   * kind:42 (チャンネルメッセージ) 要素
+   * @param {Object} event
+   * @returns {HTMLElement}
+   */
+  createChannelMessageElement(event) {
+    const li = document.createElement('li');
+    li.className = 'event event-channel';
+    li.id = event.id;
+
+    // メタデータ
+    li.appendChild(this.createMetadata(event));
+
+    // チャンネルマーク
+    const badge = document.createElement('span');
+    badge.textContent = '[チャンネル] ';
+    badge.style.cssText = 'color: #9c27b0; font-weight: bold;';
+    li.appendChild(badge);
+
+    // 本文
+    li.appendChild(this.createContent(event));
+
+    return li;
+  }
+
+  /**
+   * kind:1 (投稿) 要素
+   * @param {Object} event
+   * @returns {HTMLElement}
    */
   createPostElement(event) {
     const li = document.createElement('li');
@@ -108,7 +156,9 @@ class Timeline {
   }
 
   /**
-   * kind:6（リポスト）要素
+   * kind:6 (リポスト) 要素
+   * @param {Object} event
+   * @returns {HTMLElement}
    */
   createRepostElement(event) {
     const li = document.createElement('li');
@@ -132,7 +182,9 @@ class Timeline {
   }
 
   /**
-   * kind:7（ふぁぼ）要素
+   * kind:7 (ふぁぼ) 要素
+   * @param {Object} event
+   * @returns {HTMLElement}
    */
   createLikeElement(event) {
     const li = document.createElement('li');
@@ -175,8 +227,14 @@ class Timeline {
     return li;
   }
 
+  // ========================================
+  // 共通要素作成
+  // ========================================
+
   /**
    * メタデータ（時刻・投稿者）
+   * @param {Object} event
+   * @returns {HTMLElement}
    */
   createMetadata(event) {
     const span = document.createElement('span');
@@ -196,6 +254,8 @@ class Timeline {
 
   /**
    * タイムスタンプリンク
+   * @param {Object} event
+   * @returns {HTMLElement}
    */
   createTimestamp(event) {
     const date = new Date(event.created_at * 1000);
@@ -220,8 +280,10 @@ class Timeline {
 
   /**
    * 投稿者リンク
+   * @param {string} pubkey
+   * @returns {HTMLElement}
    */
-    createAuthorLink(pubkey) {
+  createAuthorLink(pubkey) {
     const npub = window.NostrTools.nip19.npubEncode(pubkey);
     const displayName = window.dataStore.getDisplayName(pubkey);
 
@@ -248,6 +310,8 @@ class Timeline {
 
   /**
    * 投稿本文
+   * @param {Object} event
+   * @returns {HTMLElement}
    */
   createContent(event) {
     const div = document.createElement('div');
@@ -262,6 +326,9 @@ class Timeline {
 
   /**
    * 本文をパース
+   * @param {string} content
+   * @param {Array} tags
+   * @returns {Node[]}
    */
   parseContent(content, tags) {
     const pattern = /(https?:\/\/[^\s]+)|(nostr:[\w]+1[ac-hj-np-z02-9]+)|(:[_a-zA-Z0-9]+:)/;
@@ -291,6 +358,8 @@ class Timeline {
 
   /**
    * URLリンク
+   * @param {string} url
+   * @returns {HTMLElement}
    */
   createUrlLink(url) {
     const isImage = /\.(jpeg|jpg|gif|png|webp|avif)$/i.test(url);
@@ -318,6 +387,8 @@ class Timeline {
 
   /**
    * nostr参照
+   * @param {string} nip19
+   * @returns {HTMLElement}
    */
   createNostrRef(nip19) {
     const link = document.createElement('a');
@@ -331,6 +402,9 @@ class Timeline {
 
   /**
    * カスタム絵文字
+   * @param {string} shortcode
+   * @param {Array} tags
+   * @returns {HTMLElement|Text}
    */
   createCustomEmoji(shortcode, tags) {
     const name = shortcode.slice(1, -1);
@@ -349,6 +423,8 @@ class Timeline {
 
   /**
    * イベントリンク
+   * @param {string} eventId
+   * @returns {HTMLElement}
    */
   createEventLink(eventId) {
     const nevent = window.NostrTools.nip19.neventEncode({
@@ -367,6 +443,8 @@ class Timeline {
 
   /**
    * 元投稿プレビュー
+   * @param {string} eventId
+   * @returns {HTMLElement}
    */
   createOriginalPostPreview(eventId) {
     const div = document.createElement('div');
@@ -381,7 +459,7 @@ class Timeline {
       color: #555;
     `;
 
-    const originalEvent = window.dataStore.events.get(eventId);
+    const originalEvent = window.dataStore.getEvent(eventId);
 
     if (originalEvent) {
       const author = document.createElement('span');
@@ -406,6 +484,8 @@ class Timeline {
 
   /**
    * リアクションバッジ
+   * @param {string} eventId
+   * @returns {HTMLElement|null}
    */
   createReactionBadge(eventId) {
     const counts = window.dataStore.getReactionCount(eventId);
@@ -424,6 +504,8 @@ class Timeline {
 
   /**
    * 長押しハンドラー（ふぁぼ）
+   * @param {HTMLElement} element
+   * @param {Object} event
    */
   attachLongPressHandler(element, event) {
     let timer;

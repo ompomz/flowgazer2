@@ -14,7 +14,7 @@ h1{font-size:1.2rem;margin-bottom:.5rem}
 input,textarea{transition:background-color 0.3s,color 0.3s;cursor:pointer;font-size:.9rem;padding:.5rem;border:1px solid #ddd;border-radius:4px;color:#666;background-color:#fff}
 input[type="checkbox"]{padding:0;margin:0;vertical-align:middle;appearance:checkbox;-webkit-appearance:checkbox}
 textarea{resize:vertical}
-.container button{white-space:nowrap;font-size:.8rem;font-weight:700;padding:4px 16px;margin:.5rem 0;border:none;border-radius:999px;cursor:pointer;background-color:#ddd;color:#fff}
+.container button{white-space:nowrap;font-size:.8rem;font-weight:700;padding:4px 16px;margin:.5rem 0;border:none;border-radius:999px;cursor:pointe;background-color:#ddd;color:#fff}
 .full-width{width:100%}
 .flex-container{display:flex;align-items:center;gap:.5rem;margin:.5rem 0}
 .flex-container input,.flex-container textarea{flex-grow:1;margin:0}
@@ -23,7 +23,7 @@ ul{list-style:none;padding:0;margin:.5rem 0}
 li.event{word-break:break-all;padding:.5rem .25rem .5rem .25rem;border-top:1px dashed #ddd}
 ul,li{font-size:.9rem;-webkit-text-size-adjust:none;text-size-adjust:none}
 .post-content{display:inline}
-.event-liked{border-right:.3rem solid #ffcc66}
+.event-liked{border-right:.3rem solid gold}
 .npub-link,.nostr-ref,.pubkey-ref{color:#66b3ff;text-decoration:none;}
 .custom-emoji{height:1.2rem;vertical-align:bottom}
 .tab-button{border:none;background:#ddd;cursor:pointer;border-radius:4px}
@@ -32,8 +32,8 @@ ul,li{font-size:.9rem;-webkit-text-size-adjust:none;text-size-adjust:none}
 #load-more{background:#66b3ff;color:#fff}
 #load-more.loading::before{content:"　読み込み中..."}
 #generate-trial-keypair{background-color:#f9c}
-#send-new-post{background-color:#ffcc66}
-#subscribe-relay,#apply-filter,#clear-filter,#load-follows{background-color:#ffcc66;text-align:center}
+#send-new-post{background-color:gold}
+#subscribe-relay,#apply-filter,#clear-filter,#load-follows{background-color:gold}
 #show-settings,#hide-settings{background-color:#999;font-size:.7rem;padding:3.2px 16px;margin:0}
 .hidden{display:none}
 @media (max-width:767px){.container{max-width:100%;padding:4px;margin:0}}
@@ -117,7 +117,7 @@ ul,li{font-size:.9rem;-webkit-text-size-adjust:none;text-size-adjust:none}
     <div style="display: flex; flex-direction: column; gap: 0.25rem;">
       <button id="apply-filter" style="width: 4rem;">適用</button>
       <button id="clear-filter" style="width: 4rem;">クリア</button>
-      <button id="load-follows" style="width: 4rem;display: none;">kind:3</button>
+      <button id="load-follows" style="width: 4rem;">kind:3</button>
     </div>
   </div>
 </div>

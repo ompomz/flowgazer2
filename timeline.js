@@ -112,8 +112,8 @@ class Timeline {
 
     // チャンネルマーク
     const badge = document.createElement('span');
-    badge.textContent = ' kind:42 > ';
-    badge.style.cssText = 'color: #B3A1FF; font-weight: bold;';
+    badge.textContent = '（kind:42）';
+    badge.style.cssText = 'color: #B3A1FF; font-weight: normal;';
     li.appendChild(badge);
 
     // 本文

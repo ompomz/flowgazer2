@@ -87,73 +87,44 @@ class ViewState {
     return tabs.length > 0;
   }
 
-/**
- * イベントがどのタブに属するかを判定
- * @private
- * @param {Object} event
- * @param {string|null} myPubkey
- * @returns {string[]} タブ名の配列
- */
-_determineTargetTabs(event, myPubkey) {
-  const tabs = [];
+  /**
+   * イベントがどのタブに属するかを判定
+   * @private
+   * @param {Object} event
+   * @param {string|null} myPubkey
+   * @returns {string[]} タブ名の配列
+   */
+  _determineTargetTabs(event, myPubkey) {
+    const tabs = [];
 
-  // === Global / Following / MyPosts ===
-  if ([KIND_TEXT_NOTE, KIND_REPOST, KIND_CHANNEL].includes(event.kind)) {
-    
-    // ===== Global/Following への追加判定 =====
-    let shouldAddToPublicTabs = true;
-    
-    // 1. 自分の投稿は global/following に追加しない
-    if (event.pubkey === myPubkey) {
-      shouldAddToPublicTabs = false;
-    }
-    
-    // 2. pタグに自分が含まれる場合（リプライ・メンション）も除外
-    if (shouldAddToPublicTabs) {
-      const mentionsMe = event.tags.some(t => t[0] === 'p' && t[1] === myPubkey);
-      if (mentionsMe) {
-        shouldAddToPublicTabs = false;
-      }
-    }
-    
-    // 3. kind:6（リツイート）で、元投稿が自分のものなら除外
-    if (shouldAddToPublicTabs && event.kind === KIND_REPOST) {
-      const repostedEventId = event.tags.find(t => t[0] === 'e')?.[1];
-      if (repostedEventId) {
-        const originalEvent = window.dataStore.getEvent(repostedEventId);
-        if (originalEvent && originalEvent.pubkey === myPubkey) {
-          shouldAddToPublicTabs = false;
+    // === Global / Following / MyPosts ===
+    if ([KIND_TEXT_NOTE, KIND_REPOST, KIND_CHANNEL].includes(event.kind)) {
+      // 自分の投稿は global/following に追加しない
+      if (event.pubkey !== myPubkey) {
+        tabs.push('global');
+
+        // フォロー中ならfollowingタブにも
+        if (window.dataStore.isFollowing(event.pubkey)) {
+          tabs.push('following');
         }
       }
-    }
-    
-    // Global タブへ追加
-    if (shouldAddToPublicTabs) {
-      tabs.push('global');
-      
-      // フォロー中なら following タブにも
-      if (window.dataStore.isFollowing(event.pubkey)) {
-        tabs.push('following');
+
+      // 自分の投稿なら myposts タブへ
+      if ([KIND_TEXT_NOTE, KIND_CHANNEL].includes(event.kind) && event.pubkey === myPubkey) {
+        tabs.push('myposts');
       }
     }
 
-    // ===== MyPosts タブへの追加判定 =====
-    // 自分の投稿なら myposts タブへ
-    if ([KIND_TEXT_NOTE, KIND_CHANNEL].includes(event.kind) && event.pubkey === myPubkey) {
-      tabs.push('myposts');
+    // === Likes (自分宛のリアクション/リポスト/メンション) ===
+    if ([KIND_REACTION, KIND_REPOST, KIND_TEXT_NOTE].includes(event.kind) && myPubkey) {
+      const targetPubkey = event.tags.find(t => t[0] === 'p')?.[1];
+      if (targetPubkey === myPubkey) {
+        tabs.push('likes');
+      }
     }
-  }
 
-  // === Likes (自分宛のリアクション/リポスト/メンション) ===
-  if ([KIND_REACTION, KIND_REPOST, KIND_TEXT_NOTE].includes(event.kind) && myPubkey) {
-    const targetPubkey = event.tags.find(t => t[0] === 'p')?.[1];
-    if (targetPubkey === myPubkey) {
-      tabs.push('likes');
-    }
+    return tabs;
   }
-
-  return tabs;
-}
 
   /**
    * イベントを指定タブに追加
@@ -308,31 +279,32 @@ _determineTargetTabs(event, myPubkey) {
 
     switch (tab) {
       case 'global':
-
-      // 自分の投稿を除外 (kind:1, 6, 42)
-      if (event.pubkey === myPubkey && [KIND_TEXT_NOTE, KIND_REPOST, KIND_CHANNEL].includes(event.kind)) {
-        return false;
+        // 自分の投稿を除外 (kind:1, 6, 42)
+        if (event.pubkey === myPubkey && [KIND_TEXT_NOTE, KIND_REPOST, KIND_CHANNEL].includes(event.kind)) {
+          return false;
         }
-
-      // pタグに自分が含まれるものを除外（リプライ・メンション）
-      const mentionsMe = event.tags.some(t => t[0] === 'p' && t[1] === myPubkey);
-      if (mentionsMe) {
-        return false;
-      }
-
-      // kind:6（リツイート）で、eタグが指す投稿が自分のものなら除外
-      if (event.kind === KIND_REPOST) {
-        const repostedEventId = event.tags.find(t => t[0] === 'e')?.[1];
-        if (repostedEventId) {
-          const originalEvent = window.dataStore.getEvent(repostedEventId);
-          if (originalEvent && originalEvent.pubkey === myPubkey) {
-            return false;
-          }
+        // pタグに自分が含まれるものを除外
+        const mentionsMe = event.tags.some(t => t[0] === 'p' && t[1] === myPubkey);
+        if (mentionsMe) {
+          return false;
         }
-      }
-  
-  return true;
+        return true;
 
+      case 'following':
+        // フォロー中のユーザーのみ
+        if (!window.dataStore.isFollowing(event.pubkey)) {
+          return false;
+        }
+        // 自分の投稿を除外
+        if (event.pubkey === myPubkey) {
+          return false;
+        }
+        // pタグに自分が含まれるものを除外
+        const mentionsMeInFollowing = event.tags.some(t => t[0] === 'p' && t[1] === myPubkey);
+        if (mentionsMeInFollowing) {
+          return false;
+        }
+        return true;
 
       case 'myposts':
         return event.pubkey === myPubkey;
@@ -467,36 +439,8 @@ _determineTargetTabs(event, myPubkey) {
         });
       }
     }
-    // 7. 最終確認: 自分関連の投稿を global/following から除外
-if ((tab === 'global' || tab === 'following') && myPubkey) {
-  events = events.filter(ev => {
-    // 自分の投稿を除外
-    if (ev.pubkey === myPubkey) {
-      return false;
-    }
-    
-    // 自分へのリプライを除外
-    const mentionsMe = ev.tags.some(t => t[0] === 'p' && t[1] === myPubkey);
-    if (mentionsMe) {
-      return false;
-    }
-    
-    // 自分の投稿へのリツイートを除外
-    if (ev.kind === KIND_REPOST) {
-      const repostedEventId = ev.tags.find(t => t[0] === 'e')?.[1];
-      if (repostedEventId) {
-        const originalEvent = window.dataStore.getEvent(repostedEventId);
-        if (originalEvent && originalEvent.pubkey === myPubkey) {
-          return false;
-        }
-      }
-    }
-    
-    return true;
-  });
-}
 
-return events;
+    return events;
   }
 
   // ========================================

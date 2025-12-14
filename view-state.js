@@ -16,12 +16,12 @@ class ViewState {
       global: {
         visibleEventIds: new Set(),
         cursor: null,
-        filter: { kinds: [KIND_TEXT_NOTE, KIND_REPOST, KIND_CHANNEL] }
+        filter: { kinds: [KIND_TEXT_NOTE, KIND_REPOST] }
       },
       following: {
         visibleEventIds: new Set(),
         cursor: null,
-        filter: { kinds: [KIND_TEXT_NOTE, KIND_REPOST, KIND_CHANNEL] }
+        filter: { kinds: [KIND_TEXT_NOTE, KIND_REPOST] }
       },
       myposts: {
         visibleEventIds: new Set(),
@@ -382,7 +382,13 @@ class ViewState {
    * @private
    */
   _applyFilters(events, tab, options) {
-    const { flowgazerOnly = false, authors = null } = options;
+    const { flowgazerOnly = false, authors = null, showKind42 = false } = options;
+
+    // 0. kind:42 フィルタ (global/following のみ)
+    if ((tab === 'global' || tab === 'following') && !showKind42) {
+      events = events.filter(ev => ev.kind !== KIND_CHANNEL);
+      console.log(`🚫 kind:42を非表示 (${tab}タブ)`);
+    }
 
     // 1. 禁止ワードフィルタ (global/following)
     const forbiddenWords = window.app?.forbiddenWords || [];

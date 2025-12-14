@@ -101,12 +101,15 @@ ul,li{font-size:.9rem;-webkit-text-size-adjust:none;text-size-adjust:none}
    <button id="subscribe-relay">接続</button>
   </div>
   
-  <div style="display: flex; align-items: center; gap: 0.5rem; margin-left: 0.25rem;">
+  <div style="display: flex; align-items: center; gap: 0.5rem; margin-left: 0.25rem; flex-wrap: wrap;">
     <label for="auto-update-toggle">自動更新ON</label>
     <input type="checkbox" id="auto-update-toggle" checked>
     
     <label for="filter-flowgazer-only" style="margin-left: 1rem;">via flowgazer しぼりこみ</label>
     <input type="checkbox" id="filter-flowgazer-only">
+    
+    <label for="toggle-kind42" style="margin-left: 1rem;">kind:42を表示</label>
+    <input type="checkbox" id="toggle-kind42">
     
     <label for="kind-7-content-input" style="margin-left: 1rem;">ふぁぼマーク</label>
     <input id="kind-7-content-input" type="text" maxlength="1" value="⭐" style="width: 2.5rem; text-align: center; font-size: 0.8rem;">
@@ -260,6 +263,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     window.app.toggleFlowgazerFilter(e.target.checked);
   });
   
+  // kind:42表示切り替え
+  document.getElementById('toggle-kind42').addEventListener('change', (e) => {
+    window.app.toggleKind42Display(e.target.checked);
+  });
+  
   // 自動更新トグル
   document.getElementById('auto-update-toggle').addEventListener('change', (e) => {
     window.app.isAutoUpdate = e.target.checked;
@@ -295,6 +303,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (savedFilter) {
     document.getElementById('hex-filter').value = savedFilter;
   }
+  
+  // kind:42表示状態を復元（デフォルトは非表示）
+  const savedKind42State = localStorage.getItem('showKind42');
+  const showKind42 = savedKind42State === 'true';
+  document.getElementById('toggle-kind42').checked = showKind42;
+  window.app.showKind42 = showKind42;
 });
 
 // 新規鍵ペア生成

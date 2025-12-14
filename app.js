@@ -1,5 +1,5 @@
 /**
- * app.js (リファクタリング版)
+ * app.js
  * 【責務】: アプリケーション制御、リレー接続、ユーザーアクション処理
  */
 
@@ -11,6 +11,7 @@ class FlowgazerApp {
     this.filterAuthors = null;
     this.flowgazerOnly = false;
     this.forbiddenWords = [];
+    this.showKind42 = false; // デフォルトは非表示
     
     // ===== データ取得済みフラグ =====
     this.tabDataFetched = {
@@ -96,11 +97,10 @@ class FlowgazerApp {
 
     // === Global フィルタ ===
     const globalFilter = {
-      kinds: [1, 6, 42],
+      kinds: this.showKind42 ? [1, 6, 42] : [1, 6], // ← 変更
       limit: 150
     };
 
-    // 投稿者絞り込みが設定されている場合
     if (this.filterAuthors && this.filterAuthors.length > 0) {
       globalFilter.authors = this.filterAuthors;
     }
@@ -110,14 +110,13 @@ class FlowgazerApp {
     // === Following フィルタ ===
     if (window.dataStore.followingPubkeys.size > 0) {
       const followingAuthors = Array.from(window.dataStore.followingPubkeys);
-      // 自分を除外
-      const filteredFollowing = myPubkey 
+      const filteredFollowing = myPubkey
         ? followingAuthors.filter(pk => pk !== myPubkey)
         : followingAuthors;
 
       if (filteredFollowing.length > 0) {
         filters.push({
-          kinds: [1, 6],
+          kinds: this.showKind42 ? [1, 6, 42] : [1, 6], // ← 変更
           authors: filteredFollowing,
           limit: 150
         });
@@ -423,6 +422,28 @@ class FlowgazerApp {
     if (window.timeline) {
       window.timeline.setFilter({ flowgazerOnly: enabled });
     }
+  }
+
+  /**
+  * kind:42表示切り替え
+  * @param {boolean} enabled
+  */
+  toggleKind42Display(enabled) {
+    this.showKind42 = enabled;
+  
+    // localStorageに保存
+    localStorage.setItem('showKind42', enabled.toString());
+  
+    console.log(`📺 kind:42表示: ${enabled ? 'ON' : 'OFF'}`);
+  
+    // Timelineに通知
+    if (window.timeline) {
+      window.timeline.setFilter({ showKind42: enabled });
+    }
+  
+    // 購読を再開（kind:42の取得を制御）
+    window.relayManager.unsubscribe('main-timeline');
+    this.subscribeMainTimeline();
   }
 
   // ========================================

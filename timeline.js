@@ -107,6 +107,9 @@ class Timeline {
     li.className = 'event event-channel';
     li.id = event.id;
 
+    // 長押しでふぁぼ
+    this.attachLongPressHandler(li, event);
+
     // メタデータ
     li.appendChild(this.createMetadata(event));
 
@@ -189,6 +192,9 @@ class Timeline {
   createLikeElement(event) {
     const li = document.createElement('li');
     li.className = 'event event-like';
+
+    // 長押しでふぁぼ
+    this.attachLongPressHandler(li, event);
 
     li.appendChild(this.createMetadata(event));
 

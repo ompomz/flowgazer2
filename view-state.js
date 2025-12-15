@@ -512,6 +512,12 @@ class ViewState {
 
     return filter;
   }
+  // ViewState クラスに destroy メソッドを追加
+destroy() {
+  clearTimeout(this.renderTimer);
+  this.clearAll();
+  console.log('🗑️ ViewState破棄完了');}
+  
 }
 
   // ========================================

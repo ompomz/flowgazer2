@@ -1,6 +1,6 @@
 /**
- * timeline.js (リファクタリング版)
- * 【責務】: DOM要素の生成とレンダリングのみ
+ * timeline.js (メモリリーク対策版)
+ * 【責務】: DOM要素の生成とレンダリング、適切なクリーンアップ
  */
 
 class Timeline {
@@ -8,7 +8,10 @@ class Timeline {
     this.container = containerElement;
     this.currentTab = 'global';
     
-    // フィルターオプション (ViewStateに渡すだけ)
+    // DOM要素の追跡用
+    this.activeElements = new Set();
+    
+    // フィルターオプション
     this.filterOptions = {
       flowgazerOnly: false,
       authors: null
@@ -19,22 +22,11 @@ class Timeline {
   // タブ管理
   // ========================================
 
-  /**
-   * タブを切り替え
-   * @param {string} tab
-   */
   switchTab(tab) {
     this.currentTab = tab;
-    
-    // DOMをクリアして再描画
-    this.container.innerHTML = '';
     this.refresh();
   }
 
-  /**
-   * フィルターを設定
-   * @param {Object} options
-   */
   setFilter(options) {
     this.filterOptions = { ...this.filterOptions, ...options };
     this.refresh();
@@ -44,22 +36,16 @@ class Timeline {
   // レンダリング
   // ========================================
 
-  /**
-   * タイムラインを再描画
-   */
   refresh() {
-    // 自動更新がOFFなら何もしない
     if (!window.app?.isAutoUpdate) {
       console.log('⏸️ 自動更新OFF: 描画スキップ');
       return;
     }
 
-    // コンテナをクリア
-    while (this.container.firstChild) {
-      this.container.removeChild(this.container.firstChild);
-    }
+    // 既存の要素をすべてクリーンアップ
+    this.destroyAllElements();
 
-    // ViewStateから表示対象を取得 (フィルタリング済み・ソート済み)
+    // ViewStateから表示対象を取得
     const events = window.viewState.getVisibleEvents(this.currentTab, this.filterOptions);
 
     // 描画
@@ -67,21 +53,34 @@ class Timeline {
       const element = this.createEventElement(event);
       if (element) {
         this.container.appendChild(element);
+        this.activeElements.add(element);
       }
     });
 
     console.log(`📜 タイムライン描画: ${events.length}件 (${this.currentTab})`);
   }
 
+  /**
+   * すべてのアクティブな要素を破棄
+   */
+  destroyAllElements() {
+    this.activeElements.forEach(element => {
+      if (element.destroy) {
+        element.destroy();
+      }
+    });
+    this.activeElements.clear();
+    
+    // コンテナをクリア
+    while (this.container.firstChild) {
+      this.container.removeChild(this.container.firstChild);
+    }
+  }
+
   // ========================================
   // イベント要素作成
   // ========================================
 
-  /**
-   * イベント要素を作成
-   * @param {Object} event
-   * @returns {HTMLElement|null}
-   */
   createEventElement(event) {
     switch (event.kind) {
       case 1:
@@ -99,16 +98,21 @@ class Timeline {
 
   /**
    * kind:42 (チャンネルメッセージ) 要素
-   * @param {Object} event
-   * @returns {HTMLElement}
    */
   createChannelMessageElement(event) {
     const li = document.createElement('li');
     li.className = 'event event-channel';
     li.id = event.id;
 
-    // 長押しでふぁぼ
-    this.attachLongPressHandler(li, event);
+    // 長押しハンドラー
+    const longPressHandler = this.createLongPressHandler(event);
+    longPressHandler.attach(li);
+
+    // destroy メソッド
+    li.destroy = () => {
+      longPressHandler.detach();
+      li.remove();
+    };
 
     // メタデータ
     li.appendChild(this.createMetadata(event));
@@ -127,29 +131,33 @@ class Timeline {
 
   /**
    * kind:1 (投稿) 要素
-   * @param {Object} event
-   * @returns {HTMLElement}
    */
   createPostElement(event) {
     const li = document.createElement('li');
     li.className = 'event event-post';
     li.id = event.id;
 
-    // ふぁぼ済みなら枠を付ける
     if (window.dataStore.isLikedByMe(event.id)) {
       li.classList.add('event-liked');
     }
 
-    // 長押しでふぁぼ
-    this.attachLongPressHandler(li, event);
+    // 長押しハンドラー
+    const longPressHandler = this.createLongPressHandler(event);
+    longPressHandler.attach(li);
 
-    // メタデータ（時刻・投稿者）
+    // destroy メソッド
+    li.destroy = () => {
+      longPressHandler.detach();
+      li.remove();
+    };
+
+    // メタデータ
     li.appendChild(this.createMetadata(event));
 
     // 本文
     li.appendChild(this.createContent(event));
 
-    // マイポストタブならリアクション数を表示
+    // リアクションバッジ
     if (this.currentTab === 'myposts') {
       const badge = this.createReactionBadge(event.id);
       if (badge) li.appendChild(badge);
@@ -160,12 +168,15 @@ class Timeline {
 
   /**
    * kind:6 (リポスト) 要素
-   * @param {Object} event
-   * @returns {HTMLElement}
    */
   createRepostElement(event) {
     const li = document.createElement('li');
     li.className = 'event event-repost';
+
+    // destroy メソッド（リポストは単純なのでハンドラーなし）
+    li.destroy = () => {
+      li.remove();
+    };
 
     li.appendChild(this.createMetadata(event));
 
@@ -174,7 +185,6 @@ class Timeline {
     prefix.className = 'repost-prefix';
     li.appendChild(prefix);
 
-    // 対象投稿へのリンク
     const targetId = event.tags.find(t => t[0] === 'e')?.[1];
     if (targetId) {
       const link = this.createEventLink(targetId);
@@ -186,31 +196,34 @@ class Timeline {
 
   /**
    * kind:7 (ふぁぼ) 要素
-   * @param {Object} event
-   * @returns {HTMLElement}
    */
   createLikeElement(event) {
     const li = document.createElement('li');
     li.className = 'event event-like';
 
-    // 長押しでふぁぼ
-    this.attachLongPressHandler(li, event);
+    // 長押しハンドラー
+    const longPressHandler = this.createLongPressHandler(event);
+    longPressHandler.attach(li);
+
+    // destroy メソッド
+    li.destroy = () => {
+      longPressHandler.detach();
+      li.remove();
+    };
 
     li.appendChild(this.createMetadata(event));
 
-    // content が :shortcode: 形式かチェック
+    // カスタム絵文字処理
     const content = event.content || '+';
     const isCustomEmoji = content.startsWith(':') && content.endsWith(':') && content.length > 2;
 
     if (isCustomEmoji) {
-      // カスタム絵文字の場合
       const emojiElement = this.createCustomEmoji(content, event.tags);
       emojiElement.style.cssText = 'height: 1.5rem; vertical-align: middle; margin: 0 0.25rem;';
       li.appendChild(document.createTextNode(' '));
       li.appendChild(emojiElement);
       li.appendChild(document.createTextNode(' '));
     } else {
-      // 通常のテキストまたはUnicode絵文字の場合
       const emoji = document.createElement('span');
       const displayContent = (content && content !== '+') ? content : '⭐';
       emoji.textContent = ' ' + displayContent + ' ';
@@ -225,7 +238,6 @@ class Timeline {
       link.textContent = '→ 投稿を見る';
       li.appendChild(link);
 
-      // 元投稿プレビュー
       const preview = this.createOriginalPostPreview(targetId);
       li.appendChild(preview);
     }
@@ -234,35 +246,78 @@ class Timeline {
   }
 
   // ========================================
-  // 共通要素作成
+  // 長押しハンドラー（オブジェクト化）
   // ========================================
 
   /**
-   * メタデータ（時刻・投稿者）
-   * @param {Object} event
-   * @returns {HTMLElement}
+   * 長押しハンドラーオブジェクトを作成
+   * @param {Object} event - Nostrイベント
+   * @returns {Object} { attach, detach }
    */
+  createLongPressHandler(event) {
+    let timer;
+
+    const start = () => {
+      timer = setTimeout(() => {
+        if (window.sendLikeEvent) {
+          if (confirm('☆ふぁぼる？')) {
+            window.sendLikeEvent(event.id, event.pubkey);
+          }
+        }
+      }, 900);
+    };
+
+    const cancel = () => clearTimeout(timer);
+
+    return {
+      attach(element) {
+        element.addEventListener('mousedown', start);
+        element.addEventListener('mouseup', cancel);
+        element.addEventListener('mouseleave', cancel);
+        element.addEventListener('touchstart', start, { passive: true });
+        element.addEventListener('touchend', cancel);
+        element.addEventListener('touchcancel', cancel);
+        
+        // ハンドラー参照を保存（detach用）
+        element._longPressHandlers = { start, cancel };
+      },
+
+      detach() {
+        const element = this.element;
+        if (!element || !element._longPressHandlers) return;
+        
+        const { start, cancel } = element._longPressHandlers;
+        element.removeEventListener('mousedown', start);
+        element.removeEventListener('mouseup', cancel);
+        element.removeEventListener('mouseleave', cancel);
+        element.removeEventListener('touchstart', start);
+        element.removeEventListener('touchend', cancel);
+        element.removeEventListener('touchcancel', cancel);
+        
+        delete element._longPressHandlers;
+        clearTimeout(timer);
+      },
+      
+      // 後で detach するために element を保持
+      element: null
+    };
+  }
+
+  // ========================================
+  // 共通要素作成（変更なし）
+  // ========================================
+
   createMetadata(event) {
     const span = document.createElement('span');
-
-    // 時刻
     const time = this.createTimestamp(event);
     span.appendChild(time);
     span.appendChild(document.createTextNode(' '));
-
-    // 投稿者
     const author = this.createAuthorLink(event.pubkey);
     span.appendChild(author);
     span.appendChild(document.createTextNode(' > '));
-
     return span;
   }
 
-  /**
-   * タイムスタンプリンク
-   * @param {Object} event
-   * @returns {HTMLElement}
-   */
   createTimestamp(event) {
     const date = new Date(event.created_at * 1000);
     const timeStr = String(date.getHours()).padStart(2, '0') + ':' +
@@ -284,11 +339,6 @@ class Timeline {
     return link;
   }
 
-  /**
-   * 投稿者リンク
-   * @param {string} pubkey
-   * @returns {HTMLElement}
-   */
   createAuthorLink(pubkey) {
     const npub = window.NostrTools.nip19.npubEncode(pubkey);
     const displayName = window.dataStore.getDisplayName(pubkey);
@@ -299,14 +349,12 @@ class Timeline {
     link.target = '_blank';
     link.rel = 'noreferrer';
 
-    // 全角10文字以上なら短縮
     let truncatedName = displayName;
     if (displayName.length > 10) {
       truncatedName = displayName.substring(0, 7) + '…' + displayName.slice(-2);
     }
     link.textContent = truncatedName;
 
-    // 色付け
     const hue = parseInt(pubkey.substring(0, 2), 16) * 360 / 256;
     const lightness = (hue >= 50 && hue <= 190) ? 45 : 60;
     link.style.color = `hsl(${hue}, 95%, ${lightness}%)`;
@@ -314,28 +362,16 @@ class Timeline {
     return link;
   }
 
-  /**
-   * 投稿本文
-   * @param {Object} event
-   * @returns {HTMLElement}
-   */
   createContent(event) {
     const div = document.createElement('div');
     div.className = 'post-content';
 
-    // テキスト処理（URL・nostr参照・カスタム絵文字）
     const parts = this.parseContent(event.content, event.tags);
     parts.forEach(part => div.appendChild(part));
 
     return div;
   }
 
-  /**
-   * 本文をパース
-   * @param {string} content
-   * @param {Array} tags
-   * @returns {Node[]}
-   */
   parseContent(content, tags) {
     const pattern = /(https?:\/\/[^\s]+)|(nostr:[\w]+1[ac-hj-np-z02-9]+)|(:[_a-zA-Z0-9]+:)/;
     const parts = content.split(pattern).filter(s => s);
@@ -343,17 +379,14 @@ class Timeline {
     return parts.map(s => {
       if (!s) return document.createTextNode('');
 
-      // URL
       if (s.startsWith('http')) {
         return this.createUrlLink(s);
       }
 
-      // nostr参照
       if (s.startsWith('nostr:')) {
         return this.createNostrRef(s.substring(6));
       }
 
-      // カスタム絵文字
       if (s.startsWith(':') && s.endsWith(':')) {
         return this.createCustomEmoji(s, tags);
       }
@@ -362,11 +395,6 @@ class Timeline {
     });
   }
 
-  /**
-   * URLリンク
-   * @param {string} url
-   * @returns {HTMLElement}
-   */
   createUrlLink(url) {
     const isImage = /\.(jpeg|jpg|gif|png|webp|avif)$/i.test(url);
 
@@ -391,11 +419,6 @@ class Timeline {
     return link;
   }
 
-  /**
-   * nostr参照
-   * @param {string} nip19
-   * @returns {HTMLElement}
-   */
   createNostrRef(nip19) {
     const link = document.createElement('a');
     link.href = `https://ompomz.github.io/tweetsrecap/tweet?id=${nip19}`;
@@ -406,12 +429,6 @@ class Timeline {
     return link;
   }
 
-  /**
-   * カスタム絵文字
-   * @param {string} shortcode
-   * @param {Array} tags
-   * @returns {HTMLElement|Text}
-   */
   createCustomEmoji(shortcode, tags) {
     const name = shortcode.slice(1, -1);
     const emojiTag = tags.find(t => t[0] === 'emoji' && t[1] === name);
@@ -427,11 +444,6 @@ class Timeline {
     return document.createTextNode(shortcode);
   }
 
-  /**
-   * イベントリンク
-   * @param {string} eventId
-   * @returns {HTMLElement}
-   */
   createEventLink(eventId) {
     const nevent = window.NostrTools.nip19.neventEncode({
       id: eventId,
@@ -447,11 +459,6 @@ class Timeline {
     return link;
   }
 
-  /**
-   * 元投稿プレビュー
-   * @param {string} eventId
-   * @returns {HTMLElement}
-   */
   createOriginalPostPreview(eventId) {
     const div = document.createElement('div');
     div.className = 'original-post-preview';
@@ -488,11 +495,6 @@ class Timeline {
     return div;
   }
 
-  /**
-   * リアクションバッジ
-   * @param {string} eventId
-   * @returns {HTMLElement|null}
-   */
   createReactionBadge(eventId) {
     const counts = window.dataStore.getReactionCount(eventId);
     const parts = [];
@@ -509,33 +511,12 @@ class Timeline {
   }
 
   /**
-   * 長押しハンドラー（ふぁぼ）
-   * @param {HTMLElement} element
-   * @param {Object} event
+   * タイムライン全体を破棄
    */
-  attachLongPressHandler(element, event) {
-    let timer;
-
-    const start = () => {
-      timer = setTimeout(() => {
-        if (window.sendLikeEvent) {
-          if (confirm('☆ふぁぼる？')) {
-            window.sendLikeEvent(event.id, event.pubkey);
-          }
-        }
-      }, 900);
-    };
-
-    const cancel = () => clearTimeout(timer);
-
-    element.addEventListener('mousedown', start);
-    element.addEventListener('mouseup', cancel);
-    element.addEventListener('mouseleave', cancel);
-    element.addEventListener('touchstart', start, { passive: true });
-    element.addEventListener('touchend', cancel);
-    element.addEventListener('touchcancel', cancel);
+  destroy() {
+    this.destroyAllElements();
+    console.log('🗑️ Timeline破棄完了');
   }
 }
 
-// グローバルインスタンス（初期化は後で）
 window.Timeline = Timeline;

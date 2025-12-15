@@ -632,6 +632,17 @@ class FlowgazerApp {
   }
 }
 
+// app.js の最後に追加
+window.addEventListener('beforeunload', () => {
+  if (window.timeline) {
+    window.timeline.destroy();
+  }
+  if (window.relayManager) {
+    window.relayManager.disconnect();
+  }
+  console.log('🗑️ アプリケーションクリーンアップ完了');
+});
+
 // ========================================
 // グローバル初期化
 // ========================================

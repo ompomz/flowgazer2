@@ -178,16 +178,21 @@ async function formatPostContent(content, tags) {
     console.log('🔄 formatPostContent: 投稿内容のフォーマットを開始します');
     let formattedContent = escapeHtml(content);
     formattedContent = formattedContent.replace(/\n/g, '<br>');
-const urlRegex = /\b(https?:\/\/[^\s\u3000()\[\]{}]+)/g;
+
+    // URLを画像またはリンクに変換
+    const urlRegex = /\b(https?:\/\/[^\s\u3000()\[\]{}。、！？\u4E00-\u9FFF]+)/g;    
+    
     formattedContent = formattedContent.replace(urlRegex, (url) => {
         const imageExtensions = /\.(png|jpe?g|gif|webp|svg|heic|avif)$/i;
         if (imageExtensions.test(url)) {
-          console.log(`🖼️ URLを画像タグに変換: ${url}`);
-          return `<a href="#" onclick="event.preventDefault(); openModal('${url}')"><img src="${url}" alt="post image" class="post-image"></a>`;
+            console.log(`🖼️ URLを画像タグに変換: ${url}`);
+            // openModal は modal.js のグローバル関数として呼び出す想定
+            return `<a href="#" onclick="event.preventDefault(); openModal('${url}')"><img src="${url}" alt="post image" class="post-image"></a>`;
         }
         console.log(`🔗 URLをリンクに変換: ${url}`);
         return `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`;
     });
+
 
     // Nostr ID (note1, npub1など) をプレースホルダーに置き換え
     const nostrIdsToFetch = [];

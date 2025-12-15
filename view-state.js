@@ -3,10 +3,11 @@
  * 【責務】: タブ状態管理、表示判定、フィルタリング
  */
 
-const KIND_TEXT_NOTE = 1;
-const KIND_REPOST = 6;
-const KIND_REACTION = 7;
-const KIND_CHANNEL = 42;
+// 冒頭の定数定義を削除
+// const KIND_TEXT_NOTE = 1;
+// const KIND_REPOST = 6;
+// const KIND_REACTION = 7;
+// const KIND_CHANNEL = 42;
 const RENDER_DELAY_MS = 300;
 
 class ViewState {
@@ -16,24 +17,25 @@ class ViewState {
       global: {
         visibleEventIds: new Set(),
         cursor: null,
-        filter: { kinds: [KIND_TEXT_NOTE, KIND_REPOST] }
+        filter: { kinds: [1, 6] }  // 変更
       },
       following: {
         visibleEventIds: new Set(),
         cursor: null,
-        filter: { kinds: [KIND_TEXT_NOTE, KIND_REPOST] }
+        filter: { kinds: [1, 6] }  // 変更
       },
       myposts: {
         visibleEventIds: new Set(),
         cursor: null,
-        filter: { kinds: [KIND_TEXT_NOTE, KIND_CHANNEL] }
+        filter: { kinds: [1, 42] }  // 変更
       },
       likes: {
         visibleEventIds: new Set(),
         cursor: null,
-        filter: { kinds: [KIND_REACTION, KIND_REPOST, KIND_TEXT_NOTE] }
+        filter: { kinds: [7, 6, 1] }  // 変更
       }
     };
+
 
     // ===== 表示最適化キャッシュ =====
     this.selfFeed = []; // 自分のkind:1投稿を時系列順に保持
@@ -94,11 +96,11 @@ class ViewState {
    * @param {string|null} myPubkey
    * @returns {string[]} タブ名の配列
    */
-  _determineTargetTabs(event, myPubkey) {
+    _determineTargetTabs(event, myPubkey) {
     const tabs = [];
 
     // === Global / Following / MyPosts ===
-    if ([KIND_TEXT_NOTE, KIND_REPOST, KIND_CHANNEL].includes(event.kind)) {
+    if ([1, 6, 42].includes(event.kind)) {  // 変更
       // 自分の投稿は global/following に追加しない
       if (event.pubkey !== myPubkey) {
         tabs.push('global');
@@ -110,13 +112,13 @@ class ViewState {
       }
 
       // 自分の投稿なら myposts タブへ
-      if ([KIND_TEXT_NOTE, KIND_CHANNEL].includes(event.kind) && event.pubkey === myPubkey) {
+      if ([1, 42].includes(event.kind) && event.pubkey === myPubkey) {  // 変更
         tabs.push('myposts');
       }
     }
 
     // === Likes (自分宛のリアクション/リポスト/メンション) ===
-    if ([KIND_REACTION, KIND_REPOST, KIND_TEXT_NOTE].includes(event.kind) && myPubkey) {
+    if ([7, 6, 1].includes(event.kind) && myPubkey) {  // 変更
       const targetPubkey = event.tags.find(t => t[0] === 'p')?.[1];
       if (targetPubkey === myPubkey) {
         tabs.push('likes');
@@ -208,8 +210,14 @@ class ViewState {
       this.scheduleRender();
     }
 
+    // selfFeedの更新 (自分のkind:1投稿)
+    if (event.kind === 1 && event.pubkey === window.nostrAuth?.pubkey) {  // 変更
+      this._addToSelfFeed(event);
+    }
+
     return added;
   }
+
 
   // ========================================
   // タブ切り替え
@@ -381,12 +389,12 @@ class ViewState {
    * 追加フィルタを適用
    * @private
    */
-  _applyFilters(events, tab, options) {
+    _applyFilters(events, tab, options) {
     const { flowgazerOnly = false, authors = null, showKind42 = false } = options;
 
     // 0. kind:42 フィルタ (global/following のみ)
     if ((tab === 'global' || tab === 'following') && !showKind42) {
-      events = events.filter(ev => ev.kind !== KIND_CHANNEL);
+      events = events.filter(ev => ev.kind !== 42);  // 変更
       console.log(`🚫 kind:42を非表示 (${tab}タブ)`);
     }
 
@@ -394,7 +402,7 @@ class ViewState {
     const forbiddenWords = window.app?.forbiddenWords || [];
     if ((tab === 'global' || tab === 'following') && forbiddenWords.length > 0) {
       events = events.filter(ev => {
-        if (ev.kind !== KIND_TEXT_NOTE) return true;
+        if (ev.kind !== 1) return true;  // 変更
         const content = ev.content.toLowerCase();
         return !forbiddenWords.some(word => content.includes(word.toLowerCase()));
       });
@@ -403,7 +411,7 @@ class ViewState {
     // 2. 短い投稿の制限 (global/following)
     if (tab === 'global' || tab === 'following') {
       events = events.filter(ev => {
-        if (ev.kind !== KIND_TEXT_NOTE) return true;
+        if (ev.kind !== 1) return true;  // 変更
         return ev.content.length <= 190;
       });
     }
@@ -411,7 +419,7 @@ class ViewState {
     // 3. flowgazerしぼりこみ (likes以外)
     if (flowgazerOnly && tab !== 'likes') {
       events = events.filter(ev =>
-        ev.kind === KIND_TEXT_NOTE &&
+        ev.kind === 1 &&  // 変更
         ev.tags.some(tag => tag[0] === 'client' && tag[1] === 'flowgazer')
       );
     }
@@ -425,14 +433,14 @@ class ViewState {
 
     // 5. kind:1基準のフィルタリング (global/following)
     if (tab === 'global' || tab === 'following') {
-      const kind1Events = events.filter(e => e.kind === KIND_TEXT_NOTE);
+      const kind1Events = events.filter(e => e.kind === 1);  // 変更
       
       if (kind1Events.length > 0) {
         const kind1Oldest = kind1Events[Math.min(149, kind1Events.length - 1)]?.created_at || 0;
         
         events = events.filter(e => {
-          if (e.kind === KIND_TEXT_NOTE) return true;
-          if ([KIND_REPOST, KIND_CHANNEL].includes(e.kind)) {
+          if (e.kind === 1) return true;  // 変更
+          if ([6, 42].includes(e.kind)) {  // 変更
             return e.created_at >= kind1Oldest;
           }
           return true;
@@ -442,6 +450,7 @@ class ViewState {
 
     return events;
   }
+
 
   // ========================================
   // LoadMoreフィルタ構築
@@ -453,7 +462,7 @@ class ViewState {
    * @param {number} untilTimestamp
    * @returns {Object|null} フィルタオブジェクト
    */
-  buildLoadMoreFilter(tab, untilTimestamp) {
+    buildLoadMoreFilter(tab, untilTimestamp) {
     const myPubkey = window.nostrAuth?.pubkey;
 
     const filter = {
@@ -463,7 +472,7 @@ class ViewState {
 
     switch (tab) {
       case 'global':
-        filter.kinds = [KIND_TEXT_NOTE, KIND_REPOST];
+        filter.kinds = [1, 6];  // 変更
         break;
 
       case 'following':
@@ -471,7 +480,7 @@ class ViewState {
           console.warn('フォローリストが空です');
           return null;
         }
-        filter.kinds = [KIND_TEXT_NOTE, KIND_REPOST];
+        filter.kinds = [1, 6];  // 変更
         const followingAuthors = Array.from(window.dataStore.followingPubkeys);
         filter.authors = myPubkey 
           ? followingAuthors.filter(pk => pk !== myPubkey)
@@ -483,7 +492,7 @@ class ViewState {
           console.warn('ログインが必要です');
           return null;
         }
-        filter.kinds = [KIND_TEXT_NOTE];
+        filter.kinds = [1];  // 変更
         filter.authors = [myPubkey];
         break;
 
@@ -492,7 +501,7 @@ class ViewState {
           console.warn('ログインが必要です');
           return null;
         }
-        filter.kinds = [KIND_REACTION];
+        filter.kinds = [7];  // 変更
         filter['#p'] = [myPubkey];
         break;
 
@@ -503,6 +512,7 @@ class ViewState {
 
     return filter;
   }
+}
 
   // ========================================
   // カーソル/タイムスタンプ管理

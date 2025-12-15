@@ -92,72 +92,72 @@ class FlowgazerApp {
    * @private
    */
   _buildMainTimelineFilters() {
-    const filters = [];
-    const myPubkey = window.nostrAuth.isLoggedIn() ? window.nostrAuth.pubkey : null;
+  const filters = [];
+  const myPubkey = window.nostrAuth.isLoggedIn() ? window.nostrAuth.pubkey : null;
 
-    // === Global フィルタ ===
-    const globalFilter = {
-      kinds: this.showKind42 ? [1, 6, 42] : [1, 6], // ← 変更
-      limit: 150
-    };
+  // === Global フィルタ ===
+  const globalFilter = {
+    kinds: this.showKind42 ? [1, 6, 42] : [1, 6],  // 変更
+    limit: 150
+  };
 
-    if (this.filterAuthors && this.filterAuthors.length > 0) {
-      globalFilter.authors = this.filterAuthors;
-    }
-
-    filters.push(globalFilter);
-
-    // === Following フィルタ ===
-    if (window.dataStore.followingPubkeys.size > 0) {
-      const followingAuthors = Array.from(window.dataStore.followingPubkeys);
-      const filteredFollowing = myPubkey
-        ? followingAuthors.filter(pk => pk !== myPubkey)
-        : followingAuthors;
-
-      if (filteredFollowing.length > 0) {
-        filters.push({
-          kinds: this.showKind42 ? [1, 6, 42] : [1, 6], // ← 変更
-          authors: filteredFollowing,
-          limit: 150
-        });
-      }
-    }
-
-    // === Likes フィルタ (自分宛のリアクション等) ===
-    if (myPubkey) {
-      // kind:7 (リアクション)
-      filters.push({
-        kinds: [7],
-        '#p': [myPubkey],
-        limit: 50
-      });
-
-      // kind:6 (リポスト)
-      filters.push({
-        kinds: [6],
-        '#p': [myPubkey],
-        limit: 50
-      });
-
-      // kind:1 (メンション)
-      filters.push({
-        kinds: [1],
-        '#p': [myPubkey],
-        limit: 50
-      });
-
-      // 自分の投稿へのリアクション
-      const myPostIds = Array.from(window.dataStore.getEventIdsByAuthor(myPubkey));
-      if (myPostIds.length > 0) {
-        filters.push({
-          kinds: [6, 7],
-          '#e': myPostIds.slice(0, 100) // 最新100件のみ
-        });
-      }
-    }
-
-    return filters;
+  if (this.filterAuthors && this.filterAuthors.length > 0) {
+    globalFilter.authors = this.filterAuthors;
   }
+
+  filters.push(globalFilter);
+
+  // === Following フィルタ ===
+  if (window.dataStore.followingPubkeys.size > 0) {
+    const followingAuthors = Array.from(window.dataStore.followingPubkeys);
+    const filteredFollowing = myPubkey
+      ? followingAuthors.filter(pk => pk !== myPubkey)
+      : followingAuthors;
+
+    if (filteredFollowing.length > 0) {
+      filters.push({
+        kinds: this.showKind42 ? [1, 6, 42] : [1, 6],  // 変更
+        authors: filteredFollowing,
+        limit: 150
+      });
+    }
+  }
+
+  // === Likes フィルタ (自分宛のリアクション等) ===
+  if (myPubkey) {
+    // kind:7 (リアクション)
+    filters.push({
+      kinds: [7],  // 変更
+      '#p': [myPubkey],
+      limit: 50
+    });
+
+    // kind:6 (リポスト)
+    filters.push({
+      kinds: [6],  // 変更
+      '#p': [myPubkey],
+      limit: 50
+    });
+
+    // kind:1 (メンション)
+    filters.push({
+      kinds: [1],  // 変更
+      '#p': [myPubkey],
+      limit: 50
+    });
+
+    // 自分の投稿へのリアクション
+    const myPostIds = Array.from(window.dataStore.getEventIdsByAuthor(myPubkey));
+    if (myPostIds.length > 0) {
+      filters.push({
+        kinds: [6, 7],  // 変更
+        '#e': myPostIds.slice(0, 100) // 最新100件のみ
+      });
+    }
+  }
+
+  return filters;
+}
 
   /**
    * タイムラインイベントハンドラー

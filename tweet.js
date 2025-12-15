@@ -8,11 +8,7 @@ const relatedEventsList = document.getElementById('related-events-list');
 
 // --- 定数 ---
 const DEFAULT_PROFILE_IMAGE = 'https://ompomz.github.io/favicon.ico';
-const FALLBACK_RELAYS = [
-    'wss://nos.lol/',
-    'wss://relay.nostr.band/',
-    'wss://relay.damus.io/'
-];
+const FALLBACK_RELAYS = ['wss://r.ompomz.io/'];
 
 const userProfiles = {}; 
 

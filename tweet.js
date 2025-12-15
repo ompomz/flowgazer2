@@ -7,22 +7,39 @@ const relatedEventsSection = document.getElementById('related-events-section');
 const relatedEventsList = document.getElementById('related-events-list');
 
 // --- 定数 ---
-const FALLBACK_RELAYS = ['wss://relay.nostr.band/', 'wss://nos.lol/'];
 const DEFAULT_PROFILE_IMAGE = 'https://ompomz.github.io/favicon.ico';
+const FALLBACK_RELAYS = [
+    'wss://nos.lol/',
+    'wss://relay.nostr.band/',
+    'wss://relay.damus.io/'
+];
 
-// NostrTools v2.17.0 SimplePool の初期化
-const pool = new NostrTools.SimplePool();
-const userProfiles = {};
+const userProfiles = {}; 
 
-// リレー接続の初期設定
+// 1. SimplePool のインスタンスを定義（const pool の定義は一度だけ！）
+const pool = new NostrTools.SimplePool(); 
+
+// 2. プールにリレーを登録・接続し、イベントリスナーを設定する
 FALLBACK_RELAYS.forEach(url => {
-    pool.ensureRelay(url).then(relay => {
-        relay.on('connect', () => console.log(`✅ リレーに接続しました: ${url}`));
-        relay.on('disconnect', () => console.warn(`⚠️ リレーから切断されました: ${url}`));
-        relay.on('error', () => console.error(`❌ リレー接続エラー: ${url}`));
-    }).catch(err => {
-        console.error(`接続プールの設定中にエラーが発生しました: ${url}`, err);
-    });
+    try {
+        // ensureRelay は成功すると Relay オブジェクトを返します
+        const relay = pool.ensureRelay(url);
+        
+        // リレーオブジェクトを使ってイベントリスナーを設定
+        relay.on('connect', () => {
+            console.log(`✅ リレーに接続しました: ${url}`);
+        });
+        relay.on('disconnect', () => {
+            console.warn(`⚠️ リレーから切断されました: ${url}`);
+        });
+        relay.on('error', () => {
+            console.error(`❌ リレー接続エラー: ${url}`);
+        });
+        
+    } catch (e) {
+        // ensureRelay 自体でエラー（URL形式がおかしいなど）が発生した場合
+        console.error(`接続プールの設定中にエラーが発生しました: ${url}`, e);
+    }
 });
 
 // --- ユーティリティ関数 ---
@@ -122,7 +139,7 @@ async function fetchProfiles(pubkeys) {
         kinds: [0],
         authors: pubkeysToFetch,
         until: until
-    }, FALLBACK_RELAYS);
+    });
 
     profiles.forEach(p => {
         try {

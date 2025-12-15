@@ -92,72 +92,72 @@ class FlowgazerApp {
    * @private
    */
   _buildMainTimelineFilters() {
-  const filters = [];
-  const myPubkey = window.nostrAuth.isLoggedIn() ? window.nostrAuth.pubkey : null;
+    const filters = [];
+    const myPubkey = window.nostrAuth.isLoggedIn() ? window.nostrAuth.pubkey : null;
 
-  // === Global フィルタ ===
-  const globalFilter = {
-    kinds: this.showKind42 ? [1, 6, 42] : [1, 6],  // 変更
-    limit: 150
-  };
+    // === Global フィルタ ===
+    const globalFilter = {
+      kinds: this.showKind42 ? [1, 6, 42] : [1, 6], // ← 変更
+      limit: 150
+    };
 
-  if (this.filterAuthors && this.filterAuthors.length > 0) {
-    globalFilter.authors = this.filterAuthors;
-  }
-
-  filters.push(globalFilter);
-
-  // === Following フィルタ ===
-  if (window.dataStore.followingPubkeys.size > 0) {
-    const followingAuthors = Array.from(window.dataStore.followingPubkeys);
-    const filteredFollowing = myPubkey
-      ? followingAuthors.filter(pk => pk !== myPubkey)
-      : followingAuthors;
-
-    if (filteredFollowing.length > 0) {
-      filters.push({
-        kinds: this.showKind42 ? [1, 6, 42] : [1, 6],  // 変更
-        authors: filteredFollowing,
-        limit: 150
-      });
+    if (this.filterAuthors && this.filterAuthors.length > 0) {
+      globalFilter.authors = this.filterAuthors;
     }
-  }
 
-  // === Likes フィルタ (自分宛のリアクション等) ===
-  if (myPubkey) {
-    // kind:7 (リアクション)
-    filters.push({
-      kinds: [7],  // 変更
-      '#p': [myPubkey],
-      limit: 50
-    });
+    filters.push(globalFilter);
 
-    // kind:6 (リポスト)
-    filters.push({
-      kinds: [6],  // 変更
-      '#p': [myPubkey],
-      limit: 50
-    });
+    // === Following フィルタ ===
+    if (window.dataStore.followingPubkeys.size > 0) {
+      const followingAuthors = Array.from(window.dataStore.followingPubkeys);
+      const filteredFollowing = myPubkey
+        ? followingAuthors.filter(pk => pk !== myPubkey)
+        : followingAuthors;
 
-    // kind:1 (メンション)
-    filters.push({
-      kinds: [1],  // 変更
-      '#p': [myPubkey],
-      limit: 50
-    });
-
-    // 自分の投稿へのリアクション
-    const myPostIds = Array.from(window.dataStore.getEventIdsByAuthor(myPubkey));
-    if (myPostIds.length > 0) {
-      filters.push({
-        kinds: [6, 7],  // 変更
-        '#e': myPostIds.slice(0, 100) // 最新100件のみ
-      });
+      if (filteredFollowing.length > 0) {
+        filters.push({
+          kinds: this.showKind42 ? [1, 6, 42] : [1, 6], // ← 変更
+          authors: filteredFollowing,
+          limit: 150
+        });
+      }
     }
-  }
 
-  return filters;
-}
+    // === Likes フィルタ (自分宛のリアクション等) ===
+    if (myPubkey) {
+      // kind:7 (リアクション)
+      filters.push({
+        kinds: [7],
+        '#p': [myPubkey],
+        limit: 50
+      });
+
+      // kind:6 (リポスト)
+      filters.push({
+        kinds: [6],
+        '#p': [myPubkey],
+        limit: 50
+      });
+
+      // kind:1 (メンション)
+      filters.push({
+        kinds: [1],
+        '#p': [myPubkey],
+        limit: 50
+      });
+
+      // 自分の投稿へのリアクション
+      const myPostIds = Array.from(window.dataStore.getEventIdsByAuthor(myPubkey));
+      if (myPostIds.length > 0) {
+        filters.push({
+          kinds: [6, 7],
+          '#e': myPostIds.slice(0, 100) // 最新100件のみ
+        });
+      }
+    }
+
+    return filters;
+  }
 
   /**
    * タイムラインイベントハンドラー
@@ -454,6 +454,12 @@ class FlowgazerApp {
    * もっと見るボタンの処理
    */
   loadMore() {
+    if (this.isLoadingMore) {
+      console.warn('ロード中のため、重複処理をスキップ');
+      return;
+    }
+    this.isLoadingMore = true;
+
     const tab = this.currentTab;
     const oldestTimestamp = window.viewState.getOldestTimestamp(tab);
     
@@ -464,6 +470,7 @@ class FlowgazerApp {
     
     if (!filter) {
       console.warn('フィルタ構築に失敗しました');
+      this.isLoadingMore = false;
       return;
     }
 
@@ -483,6 +490,7 @@ class FlowgazerApp {
         document.getElementById('load-more').classList.remove('loading');
         console.log(`✅ もっと見る完了 (${tab})`);
         window.viewState.renderNow();
+        this.isLoadingMore = false;
       }
     });
   }
@@ -632,17 +640,6 @@ class FlowgazerApp {
   }
 }
 
-// app.js の最後に追加
-window.addEventListener('beforeunload', () => {
-  if (window.timeline) {
-    window.timeline.destroy();
-  }
-  if (window.relayManager) {
-    window.relayManager.disconnect();
-  }
-  console.log('🗑️ アプリケーションクリーンアップ完了');
-});
-
 // ========================================
 // グローバル初期化
 // ========================================
@@ -652,3 +649,13 @@ console.log('✅ FlowgazerApp初期化完了');
 
 // グローバル関数 (長押しふぁぼ用)
 window.sendLikeEvent = (eventId, pubkey) => window.app.sendLike(eventId, pubkey);
+
+window.addEventListener('beforeunload', () => {
+  if (window.timeline) {
+    window.timeline.destroy();
+  }
+  if (window.relayManager) {
+    window.relayManager.disconnect();
+  }
+  console.log('🗑️ アプリケーションクリーンアップ完了');
+});

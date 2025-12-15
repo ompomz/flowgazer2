@@ -3,12 +3,8 @@
  * 【責務】: タブ状態管理、表示判定、フィルタリング
  */
 
-// 冒頭の定数定義を削除
-// const KIND_TEXT_NOTE = 1;
-// const KIND_REPOST = 6;
-// const KIND_REACTION = 7;
-// const KIND_CHANNEL = 42;
 const RENDER_DELAY_MS = 300;
+const CUTOFF_OFFSET_MINUTES = 15; // 初回ロード時のcutoff基準（現在時刻からのオフセット）
 
 class ViewState {
   constructor() {
@@ -17,28 +13,24 @@ class ViewState {
       global: {
         visibleEventIds: new Set(),
         cursor: null,
-        filter: { kinds: [1, 6] }  // 変更
+        filter: { kinds: [1, 6] }
       },
       following: {
         visibleEventIds: new Set(),
         cursor: null,
-        filter: { kinds: [1, 6] }  // 変更
+        filter: { kinds: [1, 6] }
       },
       myposts: {
         visibleEventIds: new Set(),
         cursor: null,
-        filter: { kinds: [1, 42] }  // 変更
+        filter: { kinds: [1, 42] }
       },
       likes: {
         visibleEventIds: new Set(),
         cursor: null,
-        filter: { kinds: [7, 6, 1] }  // 変更
+        filter: { kinds: [7, 6, 1] }
       }
     };
-
-
-    // ===== 表示最適化キャッシュ =====
-    this.selfFeed = []; // 自分のkind:1投稿を時系列順に保持
 
     // ===== 現在の状態 =====
     this.currentTab = 'global';
@@ -70,16 +62,11 @@ class ViewState {
     // 各タブに追加
     let addedToCurrentTab = false;
     tabs.forEach(tab => {
-      const added = this._addEventToTab(event, tab);
+      const added = this._addEventToTab(event, tab, myPubkey);
       if (added && tab === this.currentTab) {
         addedToCurrentTab = true;
       }
     });
-
-    // selfFeedの更新 (自分のkind:1投稿)
-    if (event.kind === KIND_TEXT_NOTE && event.pubkey === myPubkey) {
-      this._addToSelfFeed(event);
-    }
 
     // 現在のタブに追加された場合のみ描画スケジュール
     if (addedToCurrentTab) {
@@ -96,13 +83,15 @@ class ViewState {
    * @param {string|null} myPubkey
    * @returns {string[]} タブ名の配列
    */
-    _determineTargetTabs(event, myPubkey) {
+  _determineTargetTabs(event, myPubkey) {
     const tabs = [];
 
     // === Global / Following / MyPosts ===
-    if ([1, 6, 42].includes(event.kind)) {  // 変更
-      // 自分の投稿は global/following に追加しない
-      if (event.pubkey !== myPubkey) {
+    if ([1, 6, 42].includes(event.kind)) {
+      // Global/Following: 自分以外 かつ pタグに自分なし
+      const mentionsMe = event.tags.some(t => t[0] === 'p' && t[1] === myPubkey);
+      
+      if (event.pubkey !== myPubkey && !mentionsMe) {
         tabs.push('global');
 
         // フォロー中ならfollowingタブにも
@@ -112,13 +101,13 @@ class ViewState {
       }
 
       // 自分の投稿なら myposts タブへ
-      if ([1, 42].includes(event.kind) && event.pubkey === myPubkey) {  // 変更
+      if ([1, 42].includes(event.kind) && event.pubkey === myPubkey) {
         tabs.push('myposts');
       }
     }
 
     // === Likes (自分宛のリアクション/リポスト/メンション) ===
-    if ([7, 6, 1].includes(event.kind) && myPubkey) {  // 変更
+    if ([7, 6, 1].includes(event.kind) && myPubkey) {
       const targetPubkey = event.tags.find(t => t[0] === 'p')?.[1];
       if (targetPubkey === myPubkey) {
         tabs.push('likes');
@@ -132,7 +121,7 @@ class ViewState {
    * イベントを指定タブに追加
    * @private
    */
-  _addEventToTab(event, tab) {
+  _addEventToTab(event, tab, myPubkey) {
     const tabState = this.tabs[tab];
     if (!tabState) return false;
 
@@ -144,8 +133,12 @@ class ViewState {
     // 追加
     tabState.visibleEventIds.add(event.id);
 
-    // カーソル更新
-    this._updateCursor(tabState, event.created_at);
+    // カーソル更新（global/followingのみ特別処理）
+    if (tab === 'global' || tab === 'following') {
+      this._updateCursorForMainTabs(tabState, event, myPubkey);
+    } else {
+      this._updateCursor(tabState, event.created_at);
+    }
 
     return true;
   }
@@ -168,28 +161,37 @@ class ViewState {
     }
   }
 
-  // ========================================
-  // selfFeed管理 (表示最適化)
-  // ========================================
-
   /**
-   * selfFeedに追加
+   * global/followingタブ専用のカーソル更新
+   * cursor.untilは「自分以外 かつ pタグに自分なし」のイベントのみで更新
    * @private
    */
-  _addToSelfFeed(event) {
-    // 重複チェック
-    if (this.selfFeed.find(e => e.id === event.id)) {
+  _updateCursorForMainTabs(tabState, event, myPubkey) {
+    const mentionsMe = event.tags.some(t => t[0] === 'p' && t[1] === myPubkey);
+    const isOthersEvent = event.pubkey !== myPubkey && !mentionsMe;
+
+    if (!tabState.cursor) {
+      if (isOthersEvent) {
+        // 他人イベントでカーソル初期化
+        tabState.cursor = { until: event.created_at, since: event.created_at };
+      } else {
+        // 初回が自分関連イベントの場合は15分前を設定
+        const now = Math.floor(Date.now() / 1000);
+        const cutoffTime = now - (CUTOFF_OFFSET_MINUTES * 60);
+        tabState.cursor = { until: cutoffTime, since: event.created_at };
+        console.log(`⏰ ${tabState === this.tabs.global ? 'global' : 'following'}タブ: 初回cutoffを15分前に設定 (${new Date(cutoffTime * 1000).toLocaleString()})`);
+      }
       return;
     }
 
-    this.selfFeed.push(event);
-    
-    // 時系列順を保つ
-    this.selfFeed.sort((a, b) => b.created_at - a.created_at);
+    // 他人イベントのみでuntilを更新
+    if (isOthersEvent && event.created_at < tabState.cursor.until) {
+      tabState.cursor.until = event.created_at;
+    }
 
-    // 最大200件に制限
-    if (this.selfFeed.length > 200) {
-      this.selfFeed = this.selfFeed.slice(0, 200);
+    // sinceは全イベントで更新
+    if (event.created_at > tabState.cursor.since) {
+      tabState.cursor.since = event.created_at;
     }
   }
 
@@ -204,20 +206,15 @@ class ViewState {
    * @returns {boolean}
    */
   addHistoryEventToTab(event, tab) {
-    const added = this._addEventToTab(event, tab);
+    const myPubkey = window.nostrAuth?.pubkey;
+    const added = this._addEventToTab(event, tab, myPubkey);
 
     if (added && tab === this.currentTab) {
       this.scheduleRender();
     }
 
-    // selfFeedの更新 (自分のkind:1投稿)
-    if (event.kind === 1 && event.pubkey === window.nostrAuth?.pubkey) {  // 変更
-      this._addToSelfFeed(event);
-    }
-
     return added;
   }
-
 
   // ========================================
   // タブ切り替え
@@ -265,8 +262,7 @@ class ViewState {
 
     allEvents.forEach(event => {
       if (this._shouldShowInTab(event, tab, myPubkey)) {
-        tabState.visibleEventIds.add(event.id);
-        this._updateCursor(tabState, event.created_at);
+        this._addEventToTab(event, tab, myPubkey);
       }
     });
 
@@ -287,32 +283,27 @@ class ViewState {
 
     switch (tab) {
       case 'global':
-        // 自分の投稿を除外 (kind:1, 6, 42)
-        if (event.pubkey === myPubkey && [KIND_TEXT_NOTE, KIND_REPOST, KIND_CHANNEL].includes(event.kind)) {
-          return false;
-        }
+      case 'following': {
         // pタグに自分が含まれるものを除外
         const mentionsMe = event.tags.some(t => t[0] === 'p' && t[1] === myPubkey);
         if (mentionsMe) {
           return false;
         }
-        return true;
 
-      case 'following':
-        // フォロー中のユーザーのみ
-        if (!window.dataStore.isFollowing(event.pubkey)) {
-          return false;
+        // followingタブの追加条件
+        if (tab === 'following') {
+          // フォロー中のユーザーのみ
+          if (!window.dataStore.isFollowing(event.pubkey)) {
+            return false;
+          }
+          // 自分の投稿を除外
+          if (event.pubkey === myPubkey) {
+            return false;
+          }
         }
-        // 自分の投稿を除外
-        if (event.pubkey === myPubkey) {
-          return false;
-        }
-        // pタグに自分が含まれるものを除外
-        const mentionsMeInFollowing = event.tags.some(t => t[0] === 'p' && t[1] === myPubkey);
-        if (mentionsMeInFollowing) {
-          return false;
-        }
+
         return true;
+      }
 
       case 'myposts':
         return event.pubkey === myPubkey;
@@ -340,16 +331,14 @@ class ViewState {
     const tabState = this.tabs[tab];
     if (!tabState) return [];
 
-    let events;
+    // 通常取得
+    let events = Array.from(tabState.visibleEventIds)
+      .map(id => window.dataStore.getEvent(id))
+      .filter(Boolean);
 
-    // === Global/Following: selfFeedと合成 ===
+    // === cutoffフィルタ (global/following のみ) ===
     if (tab === 'global' || tab === 'following') {
-      events = this._getMergedFeed(tab);
-    } else {
-      // 通常取得
-      events = Array.from(tabState.visibleEventIds)
-        .map(id => window.dataStore.getEvent(id))
-        .filter(Boolean);
+      events = this._applyCutoffFilter(events, tabState);
     }
 
     // === 追加フィルタリング ===
@@ -364,37 +353,39 @@ class ViewState {
   }
 
   /**
-   * selfFeedとの合成フィード取得
+   * cutoffフィルタを適用
    * @private
    */
-  _getMergedFeed(tab) {
-    const tabState = this.tabs[tab];
+  _applyCutoffFilter(events, tabState) {
+    if (!tabState.cursor?.until) {
+      // cursor.untilがない場合は15分前を基準にする
+      const now = Math.floor(Date.now() / 1000);
+      const cutoff = now - (CUTOFF_OFFSET_MINUTES * 60);
+      console.log(`⏰ cutoff基準なし: 15分前 (${new Date(cutoff * 1000).toLocaleString()}) を使用`);
+      return events.filter(ev => ev.created_at >= cutoff);
+    }
+
+    const cutoff = tabState.cursor.until;
+    const beforeCount = events.length;
+    const filtered = events.filter(ev => ev.created_at >= cutoff);
     
-    // 他人のイベント取得
-    const otherEvents = Array.from(tabState.visibleEventIds)
-      .map(id => window.dataStore.getEvent(id))
-      .filter(Boolean);
+    if (beforeCount !== filtered.length) {
+      console.log(`✂️ cutoffフィルタ適用: ${beforeCount}件 → ${filtered.length}件 (基準: ${new Date(cutoff * 1000).toLocaleString()})`);
+    }
 
-    // 最新の他人投稿のタイムスタンプ
-    const latestOthers = otherEvents[0]?.created_at ?? 0;
-
-    // 自分の投稿から新しいものだけ抽出
-    const recentMine = this.selfFeed.filter(p => p.created_at > latestOthers);
-
-    // 合成
-    return [...recentMine, ...otherEvents];
+    return filtered;
   }
 
   /**
    * 追加フィルタを適用
    * @private
    */
-    _applyFilters(events, tab, options) {
+  _applyFilters(events, tab, options) {
     const { flowgazerOnly = false, authors = null, showKind42 = false } = options;
 
     // 0. kind:42 フィルタ (global/following のみ)
     if ((tab === 'global' || tab === 'following') && !showKind42) {
-      events = events.filter(ev => ev.kind !== 42);  // 変更
+      events = events.filter(ev => ev.kind !== 42);
       console.log(`🚫 kind:42を非表示 (${tab}タブ)`);
     }
 
@@ -402,7 +393,7 @@ class ViewState {
     const forbiddenWords = window.app?.forbiddenWords || [];
     if ((tab === 'global' || tab === 'following') && forbiddenWords.length > 0) {
       events = events.filter(ev => {
-        if (ev.kind !== 1) return true;  // 変更
+        if (ev.kind !== 1) return true;
         const content = ev.content.toLowerCase();
         return !forbiddenWords.some(word => content.includes(word.toLowerCase()));
       });
@@ -411,7 +402,7 @@ class ViewState {
     // 2. 短い投稿の制限 (global/following)
     if (tab === 'global' || tab === 'following') {
       events = events.filter(ev => {
-        if (ev.kind !== 1) return true;  // 変更
+        if (ev.kind !== 1) return true;
         return ev.content.length <= 190;
       });
     }
@@ -419,7 +410,7 @@ class ViewState {
     // 3. flowgazerしぼりこみ (likes以外)
     if (flowgazerOnly && tab !== 'likes') {
       events = events.filter(ev =>
-        ev.kind === 1 &&  // 変更
+        ev.kind === 1 &&
         ev.tags.some(tag => tag[0] === 'client' && tag[1] === 'flowgazer')
       );
     }
@@ -433,14 +424,14 @@ class ViewState {
 
     // 5. kind:1基準のフィルタリング (global/following)
     if (tab === 'global' || tab === 'following') {
-      const kind1Events = events.filter(e => e.kind === 1);  // 変更
+      const kind1Events = events.filter(e => e.kind === 1);
       
       if (kind1Events.length > 0) {
         const kind1Oldest = kind1Events[Math.min(149, kind1Events.length - 1)]?.created_at || 0;
         
         events = events.filter(e => {
-          if (e.kind === 1) return true;  // 変更
-          if ([6, 42].includes(e.kind)) {  // 変更
+          if (e.kind === 1) return true;
+          if ([6, 42].includes(e.kind)) {
             return e.created_at >= kind1Oldest;
           }
           return true;
@@ -450,7 +441,6 @@ class ViewState {
 
     return events;
   }
-
 
   // ========================================
   // LoadMoreフィルタ構築
@@ -462,7 +452,7 @@ class ViewState {
    * @param {number} untilTimestamp
    * @returns {Object|null} フィルタオブジェクト
    */
-    buildLoadMoreFilter(tab, untilTimestamp) {
+  buildLoadMoreFilter(tab, untilTimestamp) {
     const myPubkey = window.nostrAuth?.pubkey;
 
     const filter = {
@@ -472,7 +462,7 @@ class ViewState {
 
     switch (tab) {
       case 'global':
-        filter.kinds = [1, 6];  // 変更
+        filter.kinds = [1, 6];
         break;
 
       case 'following':
@@ -480,7 +470,7 @@ class ViewState {
           console.warn('フォローリストが空です');
           return null;
         }
-        filter.kinds = [1, 6];  // 変更
+        filter.kinds = [1, 6];
         const followingAuthors = Array.from(window.dataStore.followingPubkeys);
         filter.authors = myPubkey 
           ? followingAuthors.filter(pk => pk !== myPubkey)
@@ -492,7 +482,7 @@ class ViewState {
           console.warn('ログインが必要です');
           return null;
         }
-        filter.kinds = [1];  // 変更
+        filter.kinds = [1];
         filter.authors = [myPubkey];
         break;
 
@@ -501,7 +491,7 @@ class ViewState {
           console.warn('ログインが必要です');
           return null;
         }
-        filter.kinds = [7];  // 変更
+        filter.kinds = [7];
         filter['#p'] = [myPubkey];
         break;
 
@@ -512,13 +502,6 @@ class ViewState {
 
     return filter;
   }
-  // ViewState クラスに destroy メソッドを追加
-destroy() {
-  clearTimeout(this.renderTimer);
-  this.clearAll();
-  console.log('🗑️ ViewState破棄完了');}
-  
-}
 
   // ========================================
   // カーソル/タイムスタンプ管理
@@ -584,8 +567,16 @@ destroy() {
    */
   clearAll() {
     Object.keys(this.tabs).forEach(tab => this.clearTab(tab));
-    this.selfFeed = [];
     console.log('🗑️ ViewState全体をクリアしました');
+  }
+
+  /**
+   * 破棄処理
+   */
+  destroy() {
+    clearTimeout(this.renderTimer);
+    this.clearAll();
+    console.log('🗑️ ViewState破棄完了');
   }
 }
 

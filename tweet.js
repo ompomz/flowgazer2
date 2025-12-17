@@ -8,35 +8,19 @@ const relatedEventsList = document.getElementById('related-events-list');
 
 // --- 定数 ---
 const DEFAULT_PROFILE_IMAGE = 'https://ompomz.github.io/favicon.ico';
-const FALLBACK_RELAYS = ['wss://r.ompomz.io/'];
+const FALLBACK_RELAYS = ['wss://nos.lol/'];
 
 const userProfiles = {}; 
 
-// 1. SimplePool のインスタンスを定義（const pool の定義は一度だけ！）
-const pool = new NostrTools.SimplePool(); 
-
-// 2. プールにリレーを登録・接続し、イベントリスナーを設定する
-FALLBACK_RELAYS.forEach(url => {
-    try {
-        // ensureRelay は成功すると Relay オブジェクトを返します
-        const relay = pool.ensureRelay(url);
-        
-        // リレーオブジェクトを使ってイベントリスナーを設定
-        relay.on('connect', () => {
-            console.log(`✅ リレーに接続しました: ${url}`);
-        });
-        relay.on('disconnect', () => {
-            console.warn(`⚠️ リレーから切断されました: ${url}`);
-        });
-        relay.on('error', () => {
-            console.error(`❌ リレー接続エラー: ${url}`);
-        });
-        
-    } catch (e) {
-        // ensureRelay 自体でエラー（URL形式がおかしいなど）が発生した場合
-        console.error(`接続プールの設定中にエラーが発生しました: ${url}`, e);
-    }
-});
+async function connectRelay(url) {
+  try {
+    const relay = await Relay.connect(url)
+    console.log(`✅ リレーに接続しました: ${url}`)
+    return relay
+  } catch (e) {
+    console.error(`❌ リレー接続エラー: ${url}`, e)
+  }
+}
 
 // --- ユーティリティ関数 ---
 
@@ -92,7 +76,7 @@ function goBack() {
         window.history.back();
     } else {
         // Fallback URLは元のコードから引き継ぎ
-        window.location.href = 'https://ompomz.github.io/tweetsrecap/tweet';
+        window.location.href = 'https://ompomz.github.io/flowgazer2/tweet.html';
     }
 }
 
@@ -116,65 +100,43 @@ window.NostrViewer = {
 
 
 // --- プロフィール関連 ---
+function fetchProfiles(pubkeys) {
+  console.log(`🔍 プロフィール取得を開始: ${pubkeys.length}件`);
+  if (pubkeys.length === 0) return;
 
-async function fetchProfiles(pubkeys) {
-    console.log(`🔍 プロフィール取得を開始: ${pubkeys.length}件`);
-    if (pubkeys.length === 0) return;
-
-    const pubkeysToFetch = pubkeys.filter(pubkey => !userProfiles[pubkey]);
-    if (pubkeysToFetch.length === 0) {
-        console.log('✅ すでに全てのプロフィールがキャッシュされています。');
-        return;
-    }
-
-    console.log(`🚀 新規プロフィールをリレーから取得: ${pubkeysToFetch.length}件`);
-    const until = Math.floor(Date.now() / 1000);
-    
-    // SimplePool v2.x: list(filters, relays)
-    const profiles = await pool.list({
-        kinds: [0],
-        authors: pubkeysToFetch,
-        until: until
-    });
-
-    profiles.forEach(p => {
-        try {
-            userProfiles[p.pubkey] = JSON.parse(p.content);
-            console.log(`✅ プロフィールをキャッシュしました: ${p.pubkey}`);
-        } catch (e) {
-            console.error('❌ プロフィールJSONのパースに失敗しました:', p.pubkey, e);
-        }
-    });
+  // profileFetcher にまとめてリクエスト
+  window.profileFetcher.requestMultiple(pubkeys);
 }
 
 function createProfileHtml(pubkey, isLink = true) {
-    const profile = userProfiles[pubkey] || {};
-    const profilePicture = (profile.picture && profile.picture.trim() !== '') ? profile.picture : DEFAULT_PROFILE_IMAGE;
-    // NostrTools v2.x: nip19エンコードの参照変更
-    const npub = NostrTools.nip19.npubEncode(pubkey);
+  const profile = window.dataStore.getProfile(pubkey) || {};
+  const profilePicture = (profile.picture && profile.picture.trim() !== '')
+    ? profile.picture
+    : DEFAULT_PROFILE_IMAGE;
 
-    const profileContentHtml = `
-        <div class="profile">
-            <img src="${profilePicture}" class="profile-image" alt="User profile image">
-            <div>
-                <span class="profile-name">${escapeHtml(profile.name || 'Unknown')}</span>
-                <span class="profile-nip05">${profile.nip05 ? escapeHtml(profile.nip05) : npub.substring(0, 8) + '...' + npub.slice(-4)}</span>
-            </div>
-        </div>
-    `;
-    if (isLink) {
-        const profileUrl = `?id=${npub}`;
-        return `<a href="${profileUrl}" class="profile-link">${profileContentHtml}</a>`;
-    } else {
-        return profileContentHtml;
-    }
+  const npub = NostrTools.nip19.npubEncode(pubkey);
+
+  const profileContentHtml = `
+    <div class="profile">
+      <img src="${profilePicture}" class="profile-image" alt="User profile image">
+      <div>
+        <span class="profile-name">${escapeHtml(profile.name || 'Unknown')}</span>
+        <span class="profile-nip05">${profile.nip05 ? escapeHtml(profile.nip05) : npub.substring(0, 8) + '...' + npub.slice(-4)}</span>
+      </div>
+    </div>
+  `;
+
+  if (isLink) {
+    const profileUrl = `?id=${npub}`;
+    return `<a href="${profileUrl}" class="profile-link">${profileContentHtml}</a>`;
+  } else {
+    return profileContentHtml;
+  }
 }
-
 
 // --- コンテンツ・フォーマット関連 ---
 
 function replaceCustomEmojis(text, customEmojiMap) {
-    // ロジックは元のコードから変更なし
     if (!text || customEmojiMap.size === 0) {
         return text;
     }
@@ -281,7 +243,7 @@ async function createNostrCard(nostrId) {
         // プロフィールカードの処理
         const pubkey = decoded.data.id || decoded.data;
         // SimplePool v2.x: get(filter, relays)
-        const profileEvent = await pool.get({
+        const profileEvent = await relayManager.subscribe({
             kinds: [0],
             authors: [pubkey],
             until: until,
@@ -311,7 +273,7 @@ async function createNostrCard(nostrId) {
         // イベントカードの処理
         const eventId = decoded.data.id || decoded.data;
         // SimplePool v2.x: get(filter, relays)
-        event = await pool.get({
+        event = await relayManager.subscribe({
             ids: [eventId],
             until: until,
             limit: 1
@@ -319,7 +281,7 @@ async function createNostrCard(nostrId) {
     } else if (decoded.type === 'naddr') {
         // naddr (Parameterized Replaceable Events) の処理
         // SimplePool v2.x: get(filter, relays)
-        event = await pool.get({
+        event = await relayManager.subscribe({
             authors: [decoded.data.pubkey],
             kinds: [decoded.data.kind],
             '#d': [decoded.data.identifier],
@@ -485,103 +447,92 @@ async function renderRelatedEvents(posts, reposts, quotes) {
  * イベント詳細ビューのレンダリング
  */
 async function renderEventDetail(nostrId) {
-    showStatus('イベントデータを取得中...');
-    console.log(`🔍 イベント詳細の取得を開始: ${nostrId}`);
-    try {
-        // NostrTools v2.x: nip19デコードの参照変更
-        const decoded = NostrTools.nip19.decode(nostrId);
-        const relays = (decoded.data.relays && decoded.data.relays.length > 0) ? decoded.data.relays : FALLBACK_RELAYS;
-        const until = Math.floor(Date.now() / 1000);
-        let eventId;
-        let filters = {};
+  showStatus('イベントデータを取得中...');
+  console.log(`🔍 イベント詳細の取得を開始: ${nostrId}`);
 
-        switch (decoded.type) {
-            case 'note':
-            case 'nevent':
-                eventId = decoded.data.id || decoded.data;
-                filters = {
-                    ids: [eventId]
-                };
-                console.log('📄 note/nevent IDを検出');
-                break;
-            case 'naddr':
-                eventId = decoded.data.id;
-                filters = {
-                    authors: [decoded.data.pubkey],
-                    kinds: [decoded.data.kind],
-                    '#d': [decoded.data.identifier]
-                };
-                console.log('📌 naddr IDを検出');
-                break;
-            default:
-                showStatus('エラー: 無効なID形式です。');
-                console.error('❌ 無効なID形式です:', decoded.type);
-                return;
-        }
+  try {
+    const decoded = NostrTools.nip19.decode(nostrId);
+    const relays = (decoded.data.relays && decoded.data.relays.length > 0) ? decoded.data.relays : FALLBACK_RELAYS;
+    const until = Math.floor(Date.now() / 1000);
+    let eventId;
+    let filters = {};
 
-        // SimplePool v2.x: get(filter, relays)
-        const mainEventPromise = pool.get({...filters,
-            until: until,
-            limit: 1
-        }, relays);
-        
-        // SimplePool v2.x: list(filters, relays) - 関連イベント（リプライ、リアクション、リポストなど）を取得
-        const relatedEventsPromise = pool.list([{
-            '#e': [eventId],
-            kinds: [1, 6, 7, 16], // kind 1: Post/Reply, 6: Repost, 7: Reaction, 16: Quote
-            until: until
-        }], relays);
-
-        console.log('⏳ メインイベントと関連イベントのデータを同時に取得中...');
-        const [mainEvent, relatedEvents] = await Promise.all([mainEventPromise, relatedEventsPromise]);
-
-        if (!mainEvent) {
-            showStatus('イベントが見つかりませんでした');
-            console.warn('⚠️ メインイベントが見つかりませんでした。');
-            return;
-        }
-        console.log(`✅ メインイベントが見つかりました: kind=${mainEvent.kind}`);
-
-        // 絵文字マップの構築
-        const allEventsWithTags = [mainEvent, ...relatedEvents];
-        const customEmojiMap = new Map();
-        allEventsWithTags.forEach(event => {
-            event.tags.filter(t => t[0] === 'emoji').forEach(([_, shortcode, url]) => {
-                if (!customEmojiMap.has(`:${shortcode}:`)) {
-                    customEmojiMap.set(`:${shortcode}:`, url);
-                }
-            });
-        });
-
-        // プロフィールの事前取得
-        const pubkeysToFetch = new Set();
-        pubkeysToFetch.add(mainEvent.pubkey);
-        relatedEvents.forEach(e => pubkeysToFetch.add(e.pubkey));
-        console.log(`👤 関連プロフィールをキャッシュに読み込み中: ${pubkeysToFetch.size}件`);
-        await fetchProfiles(Array.from(pubkeysToFetch));
-
-        // メインイベントのレンダリング
-        await renderMainEvent(mainEvent, customEmojiMap);
-
-        // 関連イベントの分類とレンダリング
-        const reactions = relatedEvents.filter(e => e.kind === 7);
-        const posts = relatedEvents.filter(e => e.kind === 1);
-        const reposts = relatedEvents.filter(e => e.kind === 6);
-        const quotes = relatedEvents.filter(e => e.kind === 16);
-
-        if (reactions.length > 0) {
-            renderReactions(reactions, customEmojiMap);
-        }
-        if (posts.length > 0 || reposts.length > 0 || quotes.length > 0) {
-            renderRelatedEvents(posts, reposts, quotes);
-        }
-
-        showStatus('');
-        console.log('🎉 すべての処理が完了しました。');
-    } catch (err) {
-        console.error('❌ イベントの取得中にエラーが発生しました:', err);
-        showStatus('イベントの取得中にエラーが発生しました。');
+    switch (decoded.type) {
+      case 'note':
+      case 'nevent':
+        eventId = decoded.data.id || decoded.data;
+        filters = { ids: [eventId] };
+        console.log('📄 note/nevent IDを検出');
+        break;
+      case 'naddr':
+        eventId = decoded.data.id;
+        filters = {
+          authors: [decoded.data.pubkey],
+          kinds: [decoded.data.kind],
+          '#d': [decoded.data.identifier]
+        };
+        console.log('📌 naddr IDを検出');
+        break;
+      default:
+        showStatus('エラー: 無効なID形式です。');
+        console.error('❌ 無効なID形式です:', decoded.type);
+        return;
     }
+
+    // まず接続
+    await relayManager.connect(relays[0]);
+
+    // メインイベント購読
+    const mainSubId = 'main-' + Date.now();
+    let mainEvent = null;
+    relayManager.subscribe(mainSubId, { ...filters, until, limit: 1 }, (type, event) => {
+      if (type === 'EVENT') {
+        mainEvent = event;
+        window.dataStore.addEvent(event);
+        console.log(`✅ メインイベント取得: ${event.id}`);
+      } else if (type === 'EOSE') {
+        relayManager.unsubscribe(mainSubId);
+        if (!mainEvent) {
+          showStatus('イベントが見つかりませんでした');
+          console.warn('⚠️ メインイベントが見つかりませんでした。');
+        } else {
+          // ここで関連イベント購読を開始
+          renderRelated(eventId, until);
+        }
+      }
+    });
+
+  } catch (err) {
+    console.error('❌ イベントの取得中にエラーが発生しました:', err);
+    showStatus('イベントの取得中にエラーが発生しました。');
+  }
+}
+
+function renderRelated(eventId, until) {
+  const relatedSubId = 'related-' + Date.now();
+  const relatedEvents = [];
+  relayManager.subscribe(relatedSubId, {
+    '#e': [eventId],
+    kinds: [1, 6, 7, 16],
+    until
+  }, (type, event) => {
+    if (type === 'EVENT') {
+      relatedEvents.push(event);
+      window.dataStore.addEvent(event);
+    } else if (type === 'EOSE') {
+      relayManager.unsubscribe(relatedSubId);
+      console.log(`✅ 関連イベント取得完了: ${relatedEvents.length}件`);
+      // ここで mainEvent と relatedEvents を使って描画処理へ
+      renderMainEvent(window.dataStore.getEvent(eventId), new Map());
+      renderRelatedEvents(
+        relatedEvents.filter(e => e.kind === 1),
+        relatedEvents.filter(e => e.kind === 6),
+        relatedEvents.filter(e => e.kind === 16)
+      );
+      renderReactions(relatedEvents.filter(e => e.kind === 7), new Map());
+      showStatus('');
+    }
+  });
 }
 
 /**
@@ -605,7 +556,7 @@ async function renderProfileDetail(nostrId) {
 
         console.log(`🚀 リレーからプロフィールイベントを取得中: ${pubkey}`);
         // SimplePool v2.x: get(filter, relays)
-        const profileEvent = await pool.get({
+        const profileEvent = await relayManager.subscribe({
             kinds: [0],
             authors: [pubkey],
             until: until,
@@ -722,8 +673,4 @@ function renderInputForm() {
 }
 
 // --- 初期化 ---
-
-window.onload = () => {
-    // アプリケーションのコアな初期化処理のみを残します
-    initializeApp();
-};
+window.onload = initializeApp;

@@ -173,7 +173,6 @@ class Timeline {
     const li = document.createElement('li');
     li.className = 'event event-repost';
 
-    // destroy メソッド（リポストは単純なのでハンドラーなし）
     li.destroy = () => {
       li.remove();
     };
@@ -181,14 +180,31 @@ class Timeline {
     li.appendChild(this.createMetadata(event));
 
     const prefix = document.createElement('span');
-    prefix.textContent = 'RP: ';
+    prefix.textContent = 'RT: ';
     prefix.className = 'repost-prefix';
     li.appendChild(prefix);
 
     const targetId = event.tags.find(t => t[0] === 'e')?.[1];
     if (targetId) {
-      const link = this.createEventLink(targetId);
-      li.appendChild(link);
+      const originalEvent = window.dataStore.getEvent(targetId);
+      if (originalEvent) {
+        // 時刻リンク
+        const ts = this.createTimestamp(originalEvent);
+        li.appendChild(ts);
+
+        // 著者リンク
+        const authorLink = this.createAuthorLink(originalEvent.pubkey);
+        li.appendChild(authorLink);
+
+        // 本文
+        const content = document.createElement('span');
+        content.textContent = ' > ' + originalEvent.content;
+        li.appendChild(content);
+      } else {
+        const span = document.createElement('span');
+        span.textContent = '(元投稿が見つかりません)';
+        li.appendChild(span);
+      }
     }
 
     return li;

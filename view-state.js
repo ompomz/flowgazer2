@@ -88,19 +88,16 @@ class ViewState {
 
     // === Global / Following / MyPosts ===
     if ([1, 6, 42].includes(event.kind)) {
-      // Global/Following: 自分以外 かつ pタグに自分なし
-      const mentionsMe = event.tags.some(t => t[0] === 'p' && t[1] === myPubkey);
-      
-      if (event.pubkey !== myPubkey && !mentionsMe) {
-        tabs.push('global');
 
-        // フォロー中ならfollowingタブにも
-        if (window.dataStore.isFollowing(event.pubkey)) {
-          tabs.push('following');
-        }
+      // global に入れる条件を緩める
+      tabs.push('global');
+
+      // following は「フォローリストに従う」ので、自分が入っていたら含める
+      if (window.dataStore.isFollowing(event.pubkey)) {
+        tabs.push('following');
       }
 
-      // 自分の投稿なら myposts タブへ
+      // 自分の投稿は myposts にも入れる
       if ([1, 42].includes(event.kind) && event.pubkey === myPubkey) {
         tabs.push('myposts');
       }
@@ -284,20 +281,11 @@ class ViewState {
     switch (tab) {
       case 'global':
       case 'following': {
-        // pタグに自分が含まれるものを除外
-        const mentionsMe = event.tags.some(t => t[0] === 'p' && t[1] === myPubkey);
-        if (mentionsMe) {
-          return false;
-        }
 
         // followingタブの追加条件
         if (tab === 'following') {
           // フォロー中のユーザーのみ
           if (!window.dataStore.isFollowing(event.pubkey)) {
-            return false;
-          }
-          // 自分の投稿を除外
-          if (event.pubkey === myPubkey) {
             return false;
           }
         }

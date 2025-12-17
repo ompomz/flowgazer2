@@ -237,35 +237,6 @@ class FlowgazerApp {
       }
     });
 
-    // 3. 自分の投稿を取得 (selfFeed用)
-    this.fetchMyPostsForSelfFeed();
-  }
-
-  /**
-   * 自分の投稿をselfFeed用に取得
-   */
-  fetchMyPostsForSelfFeed() {
-    const myPubkey = window.nostrAuth.pubkey;
-    console.log('📥 自分の投稿をselfFeed用に取得中...');
-
-    window.relayManager.subscribe('self-feed-init', {
-      kinds: [1],
-      authors: [myPubkey],
-      limit: 50
-    }, (type, event) => {
-      if (type === 'EVENT') {
-        window.dataStore.addEvent(event);
-        window.viewState.onEventReceived(event);
-      } else if (type === 'EOSE') {
-        window.relayManager.unsubscribe('self-feed-init');
-        console.log('✅ selfFeed初期化完了');
-        
-        // 表示を更新
-        if (this.currentTab === 'global' || this.currentTab === 'following') {
-          window.viewState.renderNow();
-        }
-      }
-    });
   }
 
   /**

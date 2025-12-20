@@ -107,6 +107,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
 
 <script>
 
+    const FALLBACK_RELAYS = [
+        "wss://relay.damus.io/",
+        "wss://nos.lol/",
+        "wss://relay.nostr.band/"
+    ];
+
     function setupFormListener() {
         const form = document.getElementById('nostr-form');
         if (!form) return;

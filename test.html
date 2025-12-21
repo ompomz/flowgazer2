@@ -423,28 +423,24 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
         switch (event.kind) {
             case 1:
             case 30023:
-                // 通常投稿、またはロングフォーム
                 await renderStandardPost(event);
                 break;
-
-            case 40:
-            case 41:
-                // チャンネル情報そのもの
-                ChannelHandlers.renderMetadata(event);
-                break;
-
-            case 42:
-                // チャンネルメッセージ（NIP-28）
-                await ChannelHandlers.renderMessage(event);
-                break;
-
             case 6:
-                // リポスト（元のイベントを取得しに行くなどの処理が必要）
+                // リポストも基本はリアクションと似た「対象表示」が必要になります
                 renderGenericEvent(event, "リポストされました");
                 break;
-
+            case 7:
+                // ★追加：リアクション専用ハンドラ
+                await renderReactionEvent(event);
+                break;
+            case 40:
+            case 41:
+                ChannelHandlers.renderMetadata(event);
+                break;
+            case 42:
+                await ChannelHandlers.renderMessage(event);
+                break;
             default:
-                // その他（未定義のKind）
                 renderGenericEvent(event);
                 break;
         }
@@ -477,44 +473,82 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
         });
     }
 
-    async function fetchQuotes() {
-        const placeholders = document.querySelectorAll('.quote-placeholder');
+    /**
+     * Kind 7 (リアクション) のレンダリング
+     */
+    async function renderReactionEvent(event) {
+        const renderArea = document.getElementById('render-area');
 
-        for (const el of placeholders) {
-            const nip19Id = el.dataset.id;
-            try {
-                const decoded = NostrTools.nip19.decode(nip19Id);
-                const targetId = decoded.data.id || decoded.data;
-                const relays = (decoded.data.relays && decoded.data.relays.length > 0) ? decoded.data.relays : FALLBACK_RELAYS;
+        // 1. リアクションの内容（通常は "+" や "❤️"、カスタム絵文字なら :name:）
+        const emoji = event.content === "" ? "❤️" : event.content;
 
-                // 1. リレーに接続
-                await relayManager.connect(relays[0]);
+        // 2. 対象となるイベントID（eタグ）を探す
+        const targetEventId = event.tags.find(t => t[0] === 'e')?.[1];
 
-                // 2. 引用イベント本体を購読
-                relayManager.subscribe(`quote-${targetId}`, { ids: [targetId], limit: 1 }, async (type, event) => {
-                    if (type === 'EVENT' && event) {
-                        // イベント内容をフォーマット
-                        const contentHtml = await Components.utils.formatContent(event.content, event.tags);
+        // 3. 本文の整形（カスタム絵文字対応のためフォーマッタを通す）
+        const emojiHtml = await Components.utils.formatContent(emoji, event.tags);
+        const profile = window.dataStore.getProfile(event.pubkey);
 
-                        // --- 追加：引用元のプロフィールも取得する ---
-                        relayManager.subscribe(`profile-${event.pubkey}`, { kinds: [0], authors: [event.pubkey], limit: 1 }, (pType, pEvent) => {
-                            if (pType === 'EVENT' && pEvent) {
-                                const profileData = JSON.parse(pEvent.content);
-                                // プロフィール付きでカードを更新
-                                el.innerHTML = Components.quoteCard(targetId, contentHtml, profileData);
-                                relayManager.unsubscribe(`profile-${event.pubkey}`);
-                            }
-                        });
+        renderArea.innerHTML = `
+        <div class="reaction-container" style="background: #fff5f8; border: 1px dashed #ffb3c1; border-radius: 12px; padding: 15px; margin-bottom: 20px;">
+            <div style="font-size: 1.2rem; display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 2rem;">${emojiHtml}</span>
+                <span>リアクションされました</span>
+            </div>
+            <div style="margin-top: 10px; font-size: 0.9rem; color: #666;">
+                By: <b>${profile?.display_name || profile?.name || event.pubkey.substring(0, 8)}</b>
+            </div>
+        </div>
+        <div id="reaction-target-root">
+            <p style="color: #888; font-size: 0.8rem;">対象の投稿を読み込み中...</p>
+        </div>
+    `;
 
-                        // まずはプロフィールなしの状態で表示しておく
-                        el.innerHTML = Components.quoteCard(targetId, contentHtml);
-                        relayManager.unsubscribe(`quote-${targetId}`);
-                    }
-                });
-            } catch (e) {
-                console.error("引用の取得に失敗:", e);
-            }
+        // 4. プロフィールがなければ取得（いつものパターン）
+        if (!profile) {
+            window.profileFetcher.request(event.pubkey);
         }
+
+        // 5. リアクションの「対象」となった投稿を下に表示する
+        if (targetEventId) {
+            renderTargetEvent(targetEventId);
+        }
+    }
+
+    // 補助関数：対象イベントを取得して表示
+    async function renderTargetEvent(eventId) {
+        const targetRoot = document.getElementById('reaction-target-root');
+
+        // fetchSingleEvent と同様のロジックで対象イベントを取得
+        const targetEvent = await fetchSingleEvent({ data: { id: eventId } });
+
+        if (targetEvent) {
+            const contentHtml = await Components.utils.formatContent(targetEvent.content, targetEvent.tags);
+            QuoteManager.scanAndRender();
+            const profile = window.dataStore.getProfile(targetEvent.pubkey);
+
+            targetRoot.innerHTML = `
+            <div style="margin-bottom: 10px; font-size: 0.8rem; color: #888;">👇 対象の投稿</div>
+            ${Components.eventBody(targetEvent, contentHtml, profile)}
+        `;
+
+            // 対象投稿のプロフィールがなければ取得して再描画
+            if (!profile) {
+                window.profileFetcher.request(event.pubkey);
+            }
+        } else {
+            targetRoot.innerHTML = `<p style="color: #ccc;">対象の投稿が見つかりませんでした（${eventId.substring(0, 8)}）</p>`;
+        }
+    }
+
+    function renderGenericEvent(event, message = "不明なイベント") {
+        const renderArea = document.getElementById('render-area');
+        renderArea.innerHTML = `
+        <div style="padding: 20px; border: 1px solid #ccc; border-radius: 8px;">
+            <h3>${message} (Kind: ${event.kind})</h3>
+            <pre style="background: #eee; padding: 10px; overflow-x: auto;">${JSON.stringify(event, null, 2)}</pre>
+        </div>
+    `;
     }
 
     // --- 5. 実行（ここがスタート地点） ---
@@ -525,6 +559,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
         // URLをチェックして描画を開始する
         initializeApp();
     });
+
+    // プロフィールが届いたら、今の画面をもう一度描画し直す
+document.addEventListener('profiles_updated', () => {
+    console.log("プロフィール更新を検知。画面をリフレッシュします。");
+    // URLのIDから今のイベントを再描画する
+    initializeApp(); 
+});
+
 </script>
 
 </body>

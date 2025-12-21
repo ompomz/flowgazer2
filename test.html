@@ -380,7 +380,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
 
     // --- 1. まずイベントを1つだけ取ってくる関数 ---
     async function fetchSingleEvent(decoded) {
-        const eventId = decoded.data.id || decoded.data;
+        // decoded が文字列ならそのまま使い、オブジェクトなら data.id か data を取る
+        const eventId = typeof decoded === 'string' ? decoded : (decoded.data?.id || decoded.data);
+
+        if (!eventId) return null;
+    
         const relays = (decoded.data.relays && decoded.data.relays.length > 0) ? decoded.data.relays : FALLBACK_RELAYS;
 
         return new Promise(async (resolve) => {
@@ -558,26 +562,26 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
     // 補助関数：対象イベントを取得して表示
     async function renderTargetEvent(eventId) {
         const targetRoot = document.getElementById('reaction-target-root');
-
-        // fetchSingleEvent と同様のロジックで対象イベントを取得
-        const targetEvent = await fetchSingleEvent({ data: { id: eventId } });
+        const targetEvent = await fetchSingleEvent({ data: eventId });
 
         if (targetEvent) {
             const contentHtml = await Components.utils.formatContent(targetEvent.content, targetEvent.tags);
-            QuoteManager.scanAndRender();
             const profile = window.dataStore.getProfile(targetEvent.pubkey);
 
             targetRoot.innerHTML = `
-            <div style="margin-bottom: 10px; font-size: 0.8rem; color: #888;">👇 対象の投稿</div>
-            ${Components.eventBody(targetEvent, contentHtml, profile)}
+            <div style="margin-bottom: 10px; font-size: 0.8rem; color: #888; margin-top:20px;">👇リアクション元</div>
+            ${Components.eventBody(targetEvent, contentHtml, profile || {})}
         `;
 
-            // 対象投稿のプロフィールがなければ取得して再描画
             if (!profile) {
-                window.profileFetcher.request(event.pubkey);
+                window.profileFetcher.request(targetEvent.pubkey);
             }
+
+            // 引用があればそれも展開する
+            QuoteManager.scanAndRender();
+
         } else {
-            targetRoot.innerHTML = `<p style="color: #ccc;">対象の投稿が見つかりませんでした（${eventId.substring(0, 8)}）</p>`;
+            targetRoot.innerHTML = `<p style="color: #ccc; padding: 20px;">対象の投稿（${eventId.substring(0, 8)}）をリレーから取得できませんでした。</p>`;
         }
     }
 

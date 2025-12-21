@@ -399,19 +399,18 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
 
                     // 2. キャッシュがなければリレーに聞く
                     if (!profile) {
-                        relayManager.subscribe('author-profile', { kinds: [0], authors: [event.pubkey], limit: 1 }, (pType, pEvent) => {
+                        const profileSubId = `profile-${event.pubkey}`;
+
+                        relayManager.subscribe(profileSubId, { kinds: [0], authors: [event.pubkey], limit: 1 }, (pType, pEvent) => {
                             if (pType === 'EVENT' && pEvent) {
                                 const profileData = JSON.parse(pEvent.content);
                                 window.dataStore.addProfile(event.pubkey, profileData);
-
-                                // プロフィールが届いたら再描画！
                                 renderFullPost(storedEvent, profileData);
-                                relayManager.unsubscribe('author-profile');
+                                relayManager.unsubscribe(profileSubId);
                             }
                         });
                     }
-
-                    // とりあえず今の情報（プロフィールなし、またはキャッシュあり）で一度描画
+                    
                     renderFullPost(storedEvent, profile);
 
                     showStatus('');
@@ -469,19 +468,34 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
 
     async function fetchQuotes() {
         const placeholders = document.querySelectorAll('.quote-placeholder');
-        placeholders.forEach(async (el) => {
+
+        for (const el of placeholders) {
             const nip19Id = el.dataset.id;
             try {
                 const decoded = NostrTools.nip19.decode(nip19Id);
                 const targetId = decoded.data.id || decoded.data;
-                const relays = decoded.data.relays || FALLBACK_RELAYS;
+                const relays = (decoded.data.relays && decoded.data.relays.length > 0) ? decoded.data.relays : FALLBACK_RELAYS;
 
-                // リレーに接続してイベントを取得
+                // 1. リレーに接続
                 await relayManager.connect(relays[0]);
+
+                // 2. 引用イベント本体を購読
                 relayManager.subscribe(`quote-${targetId}`, { ids: [targetId], limit: 1 }, async (type, event) => {
                     if (type === 'EVENT' && event) {
-                        // プロフィールも一緒に取るとより格好いいですが、まずは本文のみ
+                        // イベント内容をフォーマット
                         const contentHtml = await Components.utils.formatContent(event.content, event.tags);
+
+                        // --- 追加：引用元のプロフィールも取得する ---
+                        relayManager.subscribe(`profile-${event.pubkey}`, { kinds: [0], authors: [event.pubkey], limit: 1 }, (pType, pEvent) => {
+                            if (pType === 'EVENT' && pEvent) {
+                                const profileData = JSON.parse(pEvent.content);
+                                // プロフィール付きでカードを更新
+                                el.innerHTML = Components.quoteCard(targetId, contentHtml, profileData);
+                                relayManager.unsubscribe(`profile-${event.pubkey}`);
+                            }
+                        });
+
+                        // まずはプロフィールなしの状態で表示しておく
                         el.innerHTML = Components.quoteCard(targetId, contentHtml);
                         relayManager.unsubscribe(`quote-${targetId}`);
                     }
@@ -489,7 +503,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
             } catch (e) {
                 console.error("引用の取得に失敗:", e);
             }
-        });
+        }
     }
 
     // --- 5. 実行（ここがスタート地点） ---

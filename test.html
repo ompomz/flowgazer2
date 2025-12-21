@@ -459,6 +459,35 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
         showStatus(''); // 読み込み完了
     }
 
+    /**
+     * Kind 1 や 30023 などの標準的な投稿をレンダリングする
+     */
+    async function renderStandardPost(event) {
+        const renderArea = document.getElementById('render-area');
+        const profile = window.dataStore.getProfile(event.pubkey);
+
+        // 1. 本文をフォーマット（HTML化）
+        const contentHtml = await Components.utils.formatContent(event.content, event.tags);
+
+        // 2. メインエリアを描画
+        renderArea.innerHTML = Components.eventBody(event, contentHtml, profile || {});
+
+        // 3. プロフィールがなければ取得をリクエスト
+        if (!profile) {
+            window.profileFetcher.request(event.pubkey);
+        }
+
+        // 4. 本文の中の「引用 (nostr:...)」をスキャンして展開
+        if (typeof QuoteManager !== 'undefined') {
+            QuoteManager.scanAndRender();
+        }
+
+        // 5. 下部のリプライやリアクションを取得開始
+        // IDに紐づくリレーがあれば優先、なければFallback
+        const relays = FALLBACK_RELAYS;
+        fetchRelatedData(event.id, relays);
+    }
+
     // --- 関連データ（リプライ・リアクション）の取得 ---
     async function fetchRelatedData(eventId, relays) {
         const reactionsList = document.getElementById('reactions-list');
@@ -572,11 +601,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
     });
 
     // プロフィールが届いたら、今の画面をもう一度描画し直す
-document.addEventListener('profiles_updated', () => {
-    console.log("プロフィール更新を検知。画面をリフレッシュします。");
-    // URLのIDから今のイベントを再描画する
-    initializeApp(); 
-});
+    document.addEventListener('profiles_updated', () => {
+        console.log("プロフィール更新を検知。画面をリフレッシュします。");
+        // URLのIDから今のイベントを再描画する
+        initializeApp(); 
+    });
 
 </script>
 

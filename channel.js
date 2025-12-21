@@ -49,15 +49,46 @@ const ChannelHandlers = {
         const renderArea = document.getElementById('render-area');
         const channelId = event.tags.find(t => t[0] === 'e' && (t[3] === 'root' || !t[3]))?.[1];
 
-        const contentHtml = await Components.utils.formatContent(event.content, event.tags);
-        const profile = window.dataStore.getProfile(event.pubkey);
+        // --- hex を nevent に変換 ---
+        let neventId = channelId || "";
+        if (channelId) {
+            try {
+                neventId = NostrTools.nip19.neventEncode({ id: channelId });
+            } catch (e) {
+                console.error("nevent変換失敗", e);
+            }
+        }
 
+        const contentHtml = await Components.utils.formatContent(event.content, event.tags);
+        let profile = window.dataStore.getProfile(event.pubkey);
+
+        // --- プロフィールがない場合の取得処理 ---
+        if (!profile) {
+            const subId = `profile-for-kind42-${event.pubkey.substring(0, 8)}`;
+            relayManager.subscribe(subId, { kinds: [0], authors: [event.pubkey], limit: 1 }, (type, pEvent) => {
+                if (type === 'EVENT' && pEvent) {
+                    try {
+                        const profileData = JSON.parse(pEvent.content);
+                        window.dataStore.addProfile(event.pubkey, profileData);
+
+                        // プロフィールが届いたので、再描画
+                        this.renderMessage(event);
+                    } catch (err) {
+                        console.error("プロフィール解析失敗", err);
+                    } finally {
+                        relayManager.unsubscribe(subId);
+                    }
+                }
+            });
+        }
+
+        // --- 描画処理 ---
         renderArea.innerHTML = `
-            <div class="channel-context" style="font-size: 0.8rem; color: #888; margin-bottom: 10px;">
-                💬 チャンネル内の発言: <a href="?id=${channelId}">${channelId?.substring(0, 8)}...</a>
-            </div>
-            ${Components.eventBody(event, contentHtml, profile)}
-        `;
+        <div class="channel-context" style="font-size: 0.8rem; color: #888; margin-bottom: 10px;">
+        kind:40 : <a href="?id=${neventId}">${neventId ? neventId.substring(0, 15) + '...' : 'unknown'}</a>
+        </div>
+        ${Components.eventBody(event, contentHtml, profile)}
+    `;
 
         fetchRelatedData(event.id);
     },

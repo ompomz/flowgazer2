@@ -8,7 +8,7 @@
 /* --- Base / Layout --- */
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; line-height: 1.5; background-color: #f7f7f7; color: #666; font-size: 0.9rem; padding: 0.5rem; }
-.container { max-width: 600px; margin: 0 auto; padding: 0.5rem; }
+.container { max-width: 600px; margin: 0 ; padding: 0.5rem; }
 .header-section, .footer-section { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0; border-bottom: 1px dashed #ddd; }
 .footer-section { border-bottom: none; border-top: 1px dashed #ddd; }
 .hidden { display: none; }
@@ -25,13 +25,13 @@ button:hover { background-color: #ffa347; }
 .post-footer { font-size: 0.8rem; color: #888; }
 .profile-card { display: flex; flex-direction: column; gap: 1rem; padding: 1rem; background: #fff; border-radius: 8px; border: 1px solid #ddd; }
 .profile-picture { width: 6rem; height: 6rem; border-radius: 50%; object-fit: cover; border: 3px solid rgba(0, 121, 107, 0.5); }
-.header-pic { width: 3rem; height: 3rem; border-radius: 50%; object-fit: cover; border: 3px solid rgba(0, 121, 107, 0.5); }
+.header-pic { width: 4rem; height: 4rem; border-radius: 50%; object-fit: cover; border: 3px solid rgba(0, 121, 107, 0.5); }
 .user-link { text-decoration: none; color: inherit; font-weight: bold; }
 .user-link:hover { text-decoration: underline; color: #66b3ff; }
 
 /* --- Reactions --- */
 .reactions-list { display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 0.25rem 0 0.75rem 0; }
-.reaction-group { display: inline-flex; align-items: center; background: #f8f8f8; padding: 2px 8px; border-radius: 15px; margin: 2px; font-size: 0.9rem; border: 1px solid #eee; }
+.reaction-group { display: inline-flex; align-items: center; background: #f8f8f8; padding: 2px 8px; border-radius: 15px; margin: 0.5rem 0rem 0rem 0rem; font-size: 0.9rem; border: 1px solid #eee; }
 .reaction-avatars { margin-left: 8px; display: flex; align-items: center; flex-direction: row-reverse; }
 .reaction-avatar { width: 20px; height: 20px; border-radius: 50%; margin-left: -5px; border: 1px solid white; background: #eee; object-fit: cover; }
 .reaction-container { background: #fff5f8; border: 1px dashed #ffb3c1; border-radius: 12px; padding: 15px; margin-bottom: 20px; }
@@ -442,127 +442,132 @@ button:hover { background-color: #ffa347; }
         }
 
     // --- 1. まずイベントを1つだけ取ってくる関数 ---
-    async function fetchSingleEvent(neventString) {
-        // 1. neventからIDとヒントリレーを抽出
-        const decoded = parseNevent(neventString);
-        if (!decoded) throw new Error("無効なID形式です");
+    async function fetchSingleEvent(originalId) {
+        // 1. IDとヒントリレーを抽出
+        const decoded = parseNevent(originalId);
+        if (!decoded) {
+            console.error("IDの解析に失敗しました:", originalId);
+            return null;
+        }
 
-        const { id: eventId, relays: hintRelays } = decoded;
+        const { id, relays: hintRelays } = decoded;
 
-        // 2. 優先順位をつけたリレーリストを作成
-        const targetRelays = getPriorityRelays(hintRelays);
-
+        // 2. 優先順位をつけた探索先リレーリストを作成
+        const targetRelays = getPriorityRelays(hintRelays || []);
         console.log("探索ターゲットリレー:", targetRelays);
 
-        // 3. 非同期ループで順番に問い合わせ
+        // 3. リレーを順番に巡回してイベントを探索
         for (const url of targetRelays) {
             try {
                 console.log(`[探索開始] ${url} に接続中...`);
 
-                // 接続を待機（リレーマネージャーのconnectがPromiseを返す前提）
-                await window.relayManager.connect(url);
+                // リレーマネージャーの fetchEvent を使用（接続・取得・タイムアウト管理を任せる想定）
+                const event = await window.relayManager.fetchEvent(url, { ids: [id], limit: 1 });
 
-                const event = await new Promise((resolve) => {
-                    const subId = 'single_fetch_' + Math.random().toString(36).substring(7);
-                    let found = false;
-
-                    // タイムアウト設定（5秒反応がなければ次のリレーへ）
-                    const timeout = setTimeout(() => {
-                        console.log(`[タイムアウト] ${url} の応答が遅いためスキップします`);
-                        window.relayManager.unsubscribe(subId);
-                        resolve(null);
-                    }, 5000);
-
-                    window.relayManager.subscribe(subId, { ids: [eventId], limit: 1 }, (type, data) => {
-                        if (type === 'EVENT' && data && !found) {
-                            found = true;
-                            clearTimeout(timeout);
-                            console.log(`[発見！] ${url} からイベントを取得しました`);
-                            window.relayManager.unsubscribe(subId);
-                            resolve(data);
-                        }
-
-                        if (type === 'EOSE') {
-                            // リレーが「もう探したけど無いよ」と答えた場合
-                            clearTimeout(timeout);
-                            console.log(`[在庫なし] ${url} には対象のイベントがありませんでした`);
-                            window.relayManager.unsubscribe(subId);
-                            resolve(null);
-                        }
-                    });
-                });
-
-                // イベントが見つかったら、ループを抜けて結果を返す
                 if (event) {
-                    // 成功したらこのリレーとの接続は維持したままでもOK（後の関連データ取得に使えるため）
-                    return event;
+                    console.log(`[発見！] ${url} でイベントを発見しました`);
+                    return { event, foundRelay: url };
                 }
 
-                // 見つからなかった場合は、このリレーは一旦切断してお行儀よくする
-                //（必要であれば次のリレーへ行く前に少し待機を入れることも可能です）
-                await window.relayManager.disconnect(url);
+                console.log(`[不在] ${url} には対象のイベントがありませんでした`);
 
-            } catch (err) {
-                console.warn(`[接続失敗] ${url} へのアクセスに失敗しました:`, err);
+            } catch (error) {
+                console.warn(`[エラー] ${url} での取得中に問題が発生しました:`, error);
+                // エラーが発生しても次のリレーの探索を続けるため、ループは継続
             }
         }
 
-        throw new Error("すべてのリレーを探索しましたが、イベントは見つかりませんでした");
+        console.error("すべてのリレーを探索しましたが、イベントは見つかりませんでした");
+        return null; // 最後まで見つからなかった場合
     }
 
     // --- 2. 振り分けを行うメインワークフロー ---
-    async function startEventWorkflow(decoded) {
-        const urlParams = new URLSearchParams(window.location.search);
-        const originalId = urlParams.get('id');
+    async function startEventWorkflow(originalId) {
+        try {
+            // 1. IDの解析
+            const decoded = parseNevent(originalId);
+            if (!decoded) throw new Error("IDの解析に失敗しました。");
 
-        const eventId = decoded.data.id || decoded.data;
+            const eventId = decoded.id; // parseNeventの戻り値に合わせたプロパティ名
+            const existingEvent = window.dataStore.getEvent(eventId);
 
-        const existingEvent = window.dataStore.getEvent(eventId);
+            let result;
 
-        let event;
-        if (existingEvent) {
-            event = existingEvent;
-        } else {
-            showStatus('イベントをロード中...');
-            event = await fetchSingleEvent(originalId);
-        }
+            // 2. データの取得（キャッシュ or リレー）
+            if (existingEvent) {
+                // すでに持っている場合はリレー情報は不明
+                result = { event: existingEvent, foundRelay: null };
+            } else {
+                showStatus('イベントをロード中...');
+                // fetchSingleEvent から { event, foundRelay } を受け取る
+                result = await fetchSingleEvent(originalId);
+            }
 
-        if (!event) {
-            showStatus('イベントが見つかりませんでした。');
+            // 結果の存在確認
+            if (!result || !result.event) {
+                showStatus('イベントが見つかりませんでした。', true);
+                const renderArea = document.getElementById('render-area');
+                if (renderArea) {
+                    renderArea.innerHTML = Components.inputForm();
+                    setupFormListener();
+                }
+                return;
+            }
+
+            const { event, foundRelay } = result;
+            console.log(`📡 Event Kind: ${event.kind} を検知しました (Source: ${foundRelay || 'Cache'})`);
+
+            // 3. Kind ごとの表示処理に分岐
+            switch (event.kind) {
+                case 1:
+                case 30023:
+                    await renderStandardPost(event);
+                    break;
+                case 6:
+                    // リポスト専用の関数がある場合はそれを使用、なければGeneric
+                    if (typeof renderRepost === 'function') {
+                        renderRepost(event);
+                    } else {
+                        renderGenericEvent(event, "リポストされました");
+                    }
+                    break;
+                case 7:
+                    await renderReactionEvent(event);
+                    break;
+                case 40:
+                case 41:
+                    ChannelHandlers.renderMetadata(event);
+                    break;
+                case 42:
+                    await ChannelHandlers.renderMessage(event);
+                    break;
+                default:
+                    renderGenericEvent(event);
+                    break;
+            }
+
+            // 4. 関連データ（リプライ・リアクション）の取得
+            // 発見したリレーがあれば最優先にし、重複を除去してリスト作成
+            const relaysForRelated = foundRelay
+                ? [...new Set([foundRelay, ...FALLBACK_RELAYS])]
+                : FALLBACK_RELAYS;
+
+            console.log("関連データの取得リレー:", relaysForRelated);
+            fetchRelatedData(event.id, relaysForRelated);
+
+            showStatus(''); // 読み込み完了
+
+        } catch (error) {
+            console.error("Workflow Error:", error);
+            showStatus('エラーが発生しました: ' + error.message, true);
+
+            // エラー時も入力フォームに戻れるようにする
             const renderArea = document.getElementById('render-area');
-            renderArea.innerHTML = Components.inputForm();
-            setupFormListener();
-            return;
+            if (renderArea) {
+                renderArea.innerHTML = Components.inputForm();
+                setupFormListener();
+            }
         }
-
-        // ここで Kind ごとの処理に分岐！
-        console.log(`📡 Event Kind: ${event.kind} を検知しました`);
-
-        switch (event.kind) {
-            case 1:
-            case 30023:
-                await renderStandardPost(event);
-                break;
-            case 6:
-                // リポストも基本はリアクションと似た「対象表示」が必要になります
-                renderGenericEvent(event, "リポストされました");
-                break;
-            case 7:
-                await renderReactionEvent(event);
-                break;
-            case 40:
-            case 41:
-                ChannelHandlers.renderMetadata(event);
-                break;
-            case 42:
-                await ChannelHandlers.renderMessage(event);
-                break;
-            default:
-                renderGenericEvent(event);
-                break;
-        }
-
-        showStatus(''); // 読み込み完了
     }
 
     /**

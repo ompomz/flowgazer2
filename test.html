@@ -266,122 +266,74 @@ button:hover { background-color: #ffa347; }
 
         // ユーティリティ（テキスト成形など）
         utils: {
-            escape: (str) =>
-                str.replace(/[&<>"']/g, m => ({
-                    '&': '&amp;',
-                    '<': '&lt;',
-                    '>': '&gt;',
-                    '"': '&quot;',
-                    "'": '&#39;'
-                }[m])),
+            escape: (str) => str.replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m])),
 
+            // pubkeyからリンク付きの名前（またはnpubの一部）を返す
             getNameLink: (pubkey, profile = {}) => {
                 const name = profile.display_name || profile.name || "";
                 const npub = NostrTools.nip19.npubEncode(pubkey);
-                const displayName = name
-                    ? Components.utils.escape(name)
-                    : `${npub.substring(0, 10)}...`;
-
-                return `
-            <a href="?id=${npub}" class="user-link">
-                ${displayName}
-            </a>
-        `;
+                const displayName = name ? Components.utils.escape(name) : `${npub.substring(0, 10)}...`;
+                // クリックで ?id=npub... へ移動
+                return `<a href="?id=${npub}" class="user-link" style="text-decoration: none; color: inherit; font-weight: bold;">${displayName}</a>`;
             },
 
+            // 投稿本文をリッチにする（画像展開・リンク化）
             formatContent: async (content, tags) => {
+                // 1. まずテキスト全体をエスケープ
+                let html = Components.utils.escape(content);
 
-                // -----------------------------
-                // 1. URL を一時トークン化
-                // -----------------------------
+                // 2. 先に改行を <br> に変換（これで本文の改行はOK）
+                html = html.replace(/\n/g, '<br>');
+
+                // 3. メディア（画像・動画・YouTube）とURLの処理
+                // ここで生成するHTMLには改行を入れないように連結します
                 const urlRegex = /https?:\/\/[\w/:%#\$&\?\(\)~\.=\+\-]+/g;
-                const urls = [];
-                let escaped = utils.escape(content);
 
-                escaped = escaped.replace(urlRegex, (url) => {
-                    const token = `__URL_${urls.length}__`;
-                    urls.push(url);
-                    return token;
-                });
-
-                // -----------------------------
-                // 2. 改行を <br> に変換（URL は除外済み）
-                // -----------------------------
-                let html = escaped.replace(/\n/g, "<br>");
-
-                // -----------------------------
-                // 3. URL トークンを展開
-                // -----------------------------
-                urls.forEach((url, i) => {
-                    const token = `__URL_${i}__`;
-
-                    // YouTube
-                    const yt = url.match(
-                        /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/
-                    );
-                    if (yt) {
-                        const videoId = yt[1];
-                        html = html.replace(token, `
-                    <div class="video-container youtube">
-                        <iframe src="https://www.youtube.com/embed/${videoId}" allowfullscreen></iframe>
-                    </div>
-                `);
-                        return;
+                html = html.replace(urlRegex, (url) => {
+                    // --- YouTube ---
+                    const ytMatch = url.match(/(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+                    if (ytMatch) {
+                        const videoId = ytMatch[1];
+                        return `
+                        <div class="video-container youtube">
+                            <iframe src="https://www.youtube.com/embed/${videoId}" allowfullscreen></iframe>
+                        </div>
+                        `;
                     }
 
-                    // 動画
+                    // --- 動画 ---
                     if (/\.(mp4|webm|mov)(?:\?.*)?$/i.test(url)) {
-                        html = html.replace(token, `
-                    <div class="video-container">
-                        <video src="${url}" controls></video>
-                    </div>
-                `);
-                        return;
+                        return `
+                        <div class="video-container">
+                            <video src="${url}" controls></video>
+                        </div>
+                        `;
                     }
 
-                    // 画像
+                    // --- 画像 ---
                     if (/\.(png|jpe?g|gif|webp|svg)(?:\?.*)?$/i.test(url)) {
-                        html = html.replace(token, `
-                    <div class="image-container">
-                        <img src="${url}" class="post-image"
-                             onclick="openModal('${url}')"
-                             onerror="this.style.display='none';">
-                    </div>
-                `);
-                        return;
+                        return `
+                        <div class="image-container">
+                            <img src="${url}" class="post-image" onclick="openModal('${url}')" onerror="this.style.display='none';">
+                        </div>
+                        `;
                     }
 
-                    // 通常リンク
-                    html = html.replace(token, `
-                <a href="${url}" target="_blank" rel="noopener" class="external-link">
-                    ${url}
-                </a>
-            `);
+                    // --- 通常リンク ---
+                    return `<a href="${url}" target="_blank" rel="noopener" class="external-link">${url}</a>`;
                 });
 
-                // -----------------------------
-                // 4. nostr:ID の展開
-                // -----------------------------
+                // 4. Nostr ID (nostr:...) の処理
                 const nostrRegex = /nostr:(n(?:pub|event|ote|profile|addr)1[a-z0-9]+)/g;
-                html = html.replace(nostrRegex, (match, nip19Id) => `
-            <div class="quote-placeholder" data-id="${nip19Id}">
-                <a href="?id=${nip19Id}" class="nostr-link">
-                    nostr:${nip19Id.substring(0, 12)}...
-                </a>
-            </div>
-        `);
+                html = html.replace(nostrRegex, (match, nip19Id) => {
+                    return `<div class="quote-placeholder" data-id="${nip19Id}"><a href="?id=${nip19Id}" class="nostr-link">nostr:${nip19Id.substring(0, 12)}...</a></div>`;
+                });
 
-                // -----------------------------
-                // 5. カスタム絵文字
-                // -----------------------------
-                tags
-                    .filter(t => t[0] === "emoji")
-                    .forEach(([_, code, url]) => {
-                        const reg = new RegExp(`:${code}:`, "g");
-                        html = html.replace(reg, `
-                    <img src="${url}" class="custom-emoji" title=":${code}:">
-                `);
-                    });
+                // 5. カスタム絵文字の置換
+                tags.filter(t => t[0] === 'emoji').forEach(([_, code, url]) => {
+                    const reg = new RegExp(`:${code}:`, 'g');
+                    html = html.replace(reg, `<img src="${url}" class="custom-emoji" title=":${code}:">`);
+                });
 
                 return html;
             }

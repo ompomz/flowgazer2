@@ -529,14 +529,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
                 window.dataStore.addEvent(event);
                 subContent.classList.remove('hidden');
 
+                // --- fetchRelatedData の中の Kind 7 処理部分 ---
                 if (event.kind === 7) {
-                    // --- リアクションの集計描画 ---
-                    // 1. この投稿に対する全リアクションをストアから取得
-                    const allReactions = window.dataStore.getEventsByKind(7).filter(e =>
-                        e.tags.some(t => t[0] === 'e' && t[1] === eventId)
+                    // 1. ストアにある全イベントから、この投稿(eventId)に対するKind 7だけを抽出
+                    const allReactions = Array.from(window.dataStore.events.values()).filter(e =>
+                        e.kind === 7 && e.tags.some(t => t[0] === 'e' && t[1] === eventId)
                     );
 
-                    // 2. 絵文字ごとにグループ化
+                    // 2. 絵文字ごとにグループ化（以前のロジックと同じ）
                     const reactionGroups = new Map();
                     allReactions.forEach(r => {
                         const emoji = r.content.trim() || '+';
@@ -549,29 +549,26 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
                     // 3. HTML組み立て
                     let html = '';
                     for (const [emoji, group] of reactionGroups.entries()) {
-                        // カスタム絵文字対応（formatContentを利用）
                         const emojiHtml = await Components.utils.formatContent(emoji === '+' ? '⭐' : emoji, group.event.tags);
 
-                        // アバターのリスト作成
                         const avatarsHtml = Array.from(group.pubkeys).map(pubkey => {
                             const profile = window.dataStore.getProfile(pubkey) || {};
-                            const pic = profile.picture || 'https://ompomz.github.io/favicon.ico';
+                            const pic = profile.picture || './favicon.ico';
                             const npub = NostrTools.nip19.npubEncode(pubkey);
 
-                            // プロフィールがなければ取得予約
                             if (!window.dataStore.getProfile(pubkey)) {
                                 window.profileFetcher.request(pubkey);
                             }
 
-                            return `<a href="?id=${npub}"><img src="${pic}" class="reaction-avatar" title="${profile.name || ''}" style="width:20px; height:20px; border-radius:50%; margin-left:-5px; border:1px solid white;"></a>`;
+                            return `<a href="?id=${npub}"><img src="${pic}" class="reaction-avatar" title="${profile.name || ''}" style="width:20px; height:20px; border-radius:50%; margin-left:-5px; border:1px solid white; background:#eee;"></a>`;
                         }).join('');
 
                         html += `
-                        <div class="reaction-group" style="display:inline-flex; align-items:center; background:#f0f0f0; padding:2px 8px; border-radius:15px; margin:2px; font-size:0.9rem;">
-                            <span class="reaction-emoji">${emojiHtml}</span>
-                            <div class="reaction-avatars" style="margin-left:5px; display:flex;">${avatarsHtml}</div>
-                            <span style="margin-left:4px; font-size:0.7rem; color:#666;">${group.pubkeys.size}</span>
-                        </div>`;
+            <div class="reaction-group" style="display:inline-flex; align-items:center; background:#f8f8f8; padding:2px 8px; border-radius:15px; margin:2px; font-size:0.9rem; border: 1px solid #eee;">
+                <span class="reaction-emoji">${emojiHtml}</span>
+                <div class="reaction-avatars" style="margin-left:5px; display:flex;">${avatarsHtml}</div>
+                <span style="margin-left:4px; font-size:0.7rem; color:#666;">${group.pubkeys.size}</span>
+            </div>`;
                     }
                     reactionsList.innerHTML = html;
 

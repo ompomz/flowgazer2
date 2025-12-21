@@ -524,19 +524,21 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
         const relatedList = document.getElementById('related-events-list');
         const subContent = document.getElementById('sub-content');
 
+        // リプライ(1)とリアクション(7)を購読
         relayManager.subscribe('related-data', { '#e': [eventId], kinds: [1, 7] }, async (type, event) => {
             if (type === 'EVENT' && event) {
+                // 1. まずは DataStore に保存
                 window.dataStore.addEvent(event);
                 subContent.classList.remove('hidden');
 
-                // --- fetchRelatedData の中の Kind 7 処理部分 ---
                 if (event.kind === 7) {
-                    // 1. ストアにある全イベントから、この投稿(eventId)に対するKind 7だけを抽出
+                    // --- リアクションの集計と描画 ---
+                    // ストアにある全イベントから、この投稿(eventId)に対するKind 7だけを抽出
                     const allReactions = Array.from(window.dataStore.events.values()).filter(e =>
                         e.kind === 7 && e.tags.some(t => t[0] === 'e' && t[1] === eventId)
                     );
 
-                    // 2. 絵文字ごとにグループ化（以前のロジックと同じ）
+                    // 絵文字ごとにグループ化
                     const reactionGroups = new Map();
                     allReactions.forEach(r => {
                         const emoji = r.content.trim() || '+';
@@ -546,36 +548,50 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
                         reactionGroups.get(emoji).pubkeys.add(r.pubkey);
                     });
 
-                    // 3. HTML組み立て
+                    // HTML組み立て
                     let html = '';
                     for (const [emoji, group] of reactionGroups.entries()) {
+                        // カスタム絵文字対応（formatContentを利用）
                         const emojiHtml = await Components.utils.formatContent(emoji === '+' ? '⭐' : emoji, group.event.tags);
 
+                        // アバターのリスト作成
                         const avatarsHtml = Array.from(group.pubkeys).map(pubkey => {
                             const profile = window.dataStore.getProfile(pubkey) || {};
                             const pic = profile.picture || './favicon.ico';
                             const npub = NostrTools.nip19.npubEncode(pubkey);
 
+                            // プロフィールがなければ取得予約
                             if (!window.dataStore.getProfile(pubkey)) {
                                 window.profileFetcher.request(pubkey);
                             }
 
-                            return `<a href="?id=${npub}"><img src="${pic}" class="reaction-avatar" title="${profile.name || ''}" style="width:20px; height:20px; border-radius:50%; margin-left:-5px; border:1px solid white; background:#eee;"></a>`;
+                            return `
+                                <a href="?id=${npub}">
+                                    <img src="${pic}" class="reaction-avatar" title="${profile.name || ''}" 
+                                         style="width:20px; height:20px; border-radius:50%; margin-left:-5px; border:1px solid white; background:#eee; object-fit: cover;">
+                                </a>`;
                         }).join('');
 
                         html += `
-            <div class="reaction-group" style="display:inline-flex; align-items:center; background:#f8f8f8; padding:2px 8px; border-radius:15px; margin:2px; font-size:0.9rem; border: 1px solid #eee;">
-                <span class="reaction-emoji">${emojiHtml}</span>
-                <div class="reaction-avatars" style="margin-left:5px; display:flex;">${avatarsHtml}</div>
-                <span style="margin-left:4px; font-size:0.7rem; color:#666;">${group.pubkeys.size}</span>
-            </div>`;
+                            <div class="reaction-group" style="display:inline-flex; align-items:center; background:#f8f8f8; padding:2px 8px; border-radius:15px; margin:2px; font-size:0.9rem; border: 1px solid #eee;">
+                                <span class="reaction-emoji" style="display:inline-flex; align-items:center;">${emojiHtml}</span>
+                                <div class="reaction-avatars" style="margin-left:8px; display:flex; align-items:center;">${avatarsHtml}</div>
+                                <span style="margin-left:6px; font-size:0.75rem; color:#666; font-weight:bold;">${group.pubkeys.size}</span>
+                            </div>`;
                     }
                     reactionsList.innerHTML = html;
 
                 } else if (event.kind === 1) {
-                    // リプライの追加（既存のまま）
+                    // リプライの追加
                     const html = await Components.utils.formatContent(event.content, event.tags);
+                    const profile = window.dataStore.getProfile(event.pubkey) || {};
+
+                    // リプライにも名前リンクやアイコンを入れるならここを Components.replyCard に渡す
                     relatedList.innerHTML += Components.replyCard(event, html);
+
+                    if (!window.dataStore.getProfile(event.pubkey)) {
+                        window.profileFetcher.request(event.pubkey);
+                    }
                 }
             }
         });

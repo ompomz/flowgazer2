@@ -380,31 +380,43 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
 
     // --- 1. まずイベントを1つだけ取ってくる関数 ---
     async function fetchSingleEvent(decoded) {
-        // decoded が文字列ならそのまま使い、オブジェクトなら data.id か data を取る
+        // 1. eventId の特定
         const eventId = typeof decoded === 'string' ? decoded : (decoded.data?.id || decoded.data);
-
         if (!eventId) return null;
-    
-        const relays = (decoded.data.relays && decoded.data.relays.length > 0) ? decoded.data.relays : FALLBACK_RELAYS;
+
+        // 2. リレーリストの決定（ここを修正：decoded.data が無い場合を考慮）
+        let relays = FALLBACK_RELAYS;
+        if (typeof decoded === 'object' && decoded.data?.relays && decoded.data.relays.length > 0) {
+            relays = decoded.data.relays;
+        }
 
         return new Promise(async (resolve) => {
-            await relayManager.connect(relays[0]);
+            try {
+                // リレーに確実に接続
+                await relayManager.connect(relays[0]);
 
-            const subId = `fetch-once-${eventId.substring(0, 8)}`;
+                const subId = `fetch-once-${eventId.substring(0, 8)}`;
 
-            // タイムアウト設定（5秒待っても来なければnull）
-            const timer = setTimeout(() => {
-                relayManager.unsubscribe(subId);
-                resolve(null);
-            }, 5000);
-
-            relayManager.subscribe(subId, { ids: [eventId], limit: 1 }, (type, event) => {
-                if (type === 'EVENT' && event) {
-                    clearTimeout(timer);
+                // タイムアウトを少し長めの 8秒 に設定
+                const timer = setTimeout(() => {
                     relayManager.unsubscribe(subId);
-                    resolve(event);
-                }
-            });
+                    console.log(`Timeout: ${subId}`);
+                    resolve(null);
+                }, 8000);
+
+                relayManager.subscribe(subId, { ids: [eventId], limit: 1 }, (type, event) => {
+                    if (type === 'EVENT' && event) {
+                        clearTimeout(timer);
+                        relayManager.unsubscribe(subId);
+                        // 確実に DataStore に保存しておく
+                        window.dataStore.addEvent(event);
+                        resolve(event);
+                    }
+                });
+            } catch (err) {
+                console.error("Fetch failed:", err);
+                resolve(null);
+            }
         });
     }
 
@@ -562,9 +574,17 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
     // 補助関数：対象イベントを取得して表示
     async function renderTargetEvent(eventId) {
         const targetRoot = document.getElementById('reaction-target-root');
-        const targetEvent = await fetchSingleEvent({ data: eventId });
+
+        // すでに dataStore にあるか確認（無駄な通信を防ぐ）
+        let targetEvent = window.dataStore.getEvent(eventId);
+
+        if (!targetEvent) {
+            // dataStoreに無い場合のみリレーに聞きに行く
+            targetEvent = await fetchSingleEvent(eventId);
+        }
 
         if (targetEvent) {
+            // ... (ここから下の描画ロジックは今のままでOKです) ...
             const contentHtml = await Components.utils.formatContent(targetEvent.content, targetEvent.tags);
             const profile = window.dataStore.getProfile(targetEvent.pubkey);
 
@@ -577,11 +597,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
                 window.profileFetcher.request(targetEvent.pubkey);
             }
 
-            // 引用があればそれも展開する
-            QuoteManager.scanAndRender();
-
+            // 引用展開
+            if (typeof QuoteManager !== 'undefined') {
+                QuoteManager.scanAndRender();
+            }
         } else {
-            targetRoot.innerHTML = `<p style="color: #ccc; padding: 20px;">対象の投稿（${eventId.substring(0, 8)}）をリレーから取得できませんでした。</p>`;
+            targetRoot.innerHTML = `<p style="color: #ccc; padding: 20px;">対象の投稿（${eventId.substring(0, 8)}）をリレーから取得できませんでした。しばらく待ってから再読み込みしてください。</p>`;
         }
     }
 

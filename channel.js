@@ -161,7 +161,7 @@ const ChannelHandlers = {
     _createChatMessageHtml: async function (event, profile) {
         const contentHtml = await Components.utils.formatContent(event.content, event.tags);
         const name = profile?.display_name || profile?.name || event.pubkey.substring(0, 8);
-        const picture = profile?.picture || './favicon.ico';
+        const picture = profile?.picture || 'https://ompomz.github.io/favicon.ico';
 
         return `
             <div class="chat-row" style="display: flex; gap: 10px; align-items: flex-start;">

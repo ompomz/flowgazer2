@@ -590,7 +590,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
                         // アバターのリスト作成
                         const avatarsHtml = Array.from(group.pubkeys).map(pubkey => {
                             const profile = window.dataStore.getProfile(pubkey) || {};
-                            const pic = profile.picture || './favicon.ico';
+                            const pic = profile.picture || 'https://ompomz.github.io/favicon.ico';
                             const npub = NostrTools.nip19.npubEncode(pubkey);
 
                             // プロフィールがなければ取得予約
@@ -609,7 +609,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
                             <div class="reaction-group" style="display:inline-flex; align-items:center; background:#f8f8f8; padding:2px 8px; border-radius:15px; margin:2px; font-size:0.9rem; border: 1px solid #eee;">
                                 <span class="reaction-emoji" style="display:inline-flex; align-items:center;">${emojiHtml}</span>
                                 <div class="reaction-avatars" style="margin-left:8px; display:flex; align-items:center;">${avatarsHtml}</div>
-                                <span style="margin-left:6px; font-size:0.75rem; color:#666; font-weight:bold;">${group.pubkeys.size}</span>
                             </div>`;
                     }
                     reactionsList.innerHTML = html;

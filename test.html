@@ -106,9 +106,25 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
 <script src="./quote-manager.js"></script>
 
 <script>
-    function parseNevent(bech32Address) {
+    function parseNevent(input) {
+        if (input && typeof input === 'object' && input.type) {
+            const data = input.data;
+            if (input.type === 'nevent') {
+                return {
+                    id: data.id,
+                    relays: data.relays || [],
+                    author: data.author || null,
+                    kind: data.kind || null
+                };
+            } else if (input.type === 'note') {
+                return { id: data, relays: [] };
+            }
+            return null;
+        }
         try {
-            const { type, data } = window.NostrTools.nip19.decode(bech32Address);
+            if (typeof input !== 'string') return null;
+
+            const { type, data } = window.NostrTools.nip19.decode(input);
             if (type === 'nevent') {
                 return {
                     id: data.id,
@@ -497,18 +513,19 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
 
     // --- 2. 振り分けを行うメインワークフロー ---
     async function startEventWorkflow(decoded) {
+        const urlParams = new URLSearchParams(window.location.search);
+        const originalId = urlParams.get('id');
+
         const eventId = decoded.data.id || decoded.data;
 
-        // すでに dataStore にそのイベントがあるなら、リレーに聞きに行かない
         const existingEvent = window.dataStore.getEvent(eventId);
 
         let event;
         if (existingEvent) {
             event = existingEvent;
-            console.log("📦 キャッシュからイベントを表示します");
         } else {
             showStatus('イベントをロード中...');
-            event = await fetchSingleEvent(decoded);
+            event = await fetchSingleEvent(originalId);
         }
 
         if (!event) {

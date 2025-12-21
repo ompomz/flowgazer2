@@ -5,63 +5,48 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>tweetviewer</title>
 <style>
+/* --- Base / Layout --- */
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans JP", sans-serif; line-height: 1.5; background-color: #f7f7f7; color: #666; font-size: 0.9rem; padding: 0.5rem; }
-.container { max-width: 600px; margin: 0; padding: 0.5rem; border-radius: 4px; }
-.container h1 { font-size: 1.3rem; }
-.container h2 { font-size: 1.1rem; }
-.container p { word-break: break-all; }
-.container a { color: #66b3ff; text-decoration: none; }
-.container a:hover { color: #4da6ff; text-decoration: underline; }
-@media (max-width: 767px) { .container { max-width: 100%; } }
-.container button { border: none; font-size: 0.8rem; padding: 0.5rem 0.8rem; border-radius: 999px; font-weight: bold; cursor: pointer; background-color: #ffb366; color: #fff; transition: background-color 0.3s ease, color 0.3s ease; }
-.container button:hover { background-color: #ffa347; }
-.header-section { display: flex; justify-content: flex-start; align-items: center; gap: 0.5rem; padding: 0.5rem 0; border-bottom: 1px dashed #ddd; }
-#main-event { padding: 0.5rem 0; }
-#status { margin: 0.5rem 0rem; font-weight: bold; color: #ff99cc; }
-.reactions-list { display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 0.25rem 0rem 0.75rem 0rem; }
-.reactions-list img{ height: 1.25rem !important; object-fit: cover;}
-.reaction-group { display: flex; align-items: center; background-color: #eee; border-radius: 999px; padding: 0.2rem 0.5rem; font-size: 0.8rem; }
-.reaction-avatars { display: flex; flex-direction: row-reverse; }
-.reaction-avatar { width: 1.25rem; height: 1.25rem; border-radius: 50%; object-fit: cover; display: block; margin: 0; }
-.related-posts { margin: 0.5rem 0rem; }
-.related-post-card { background-color: #fff; border: 1px solid #ddd; border-radius: 4px; padding: 0.25rem 0.5rem; margin: 0.5rem 0rem; }
-.related-post-card .profile { display: flex; align-items: center; gap: 0.5rem; margin: 0.25rem 0rem; }
-.related-post-card .profile-name, .related-post-card .profile-npub { font-size: 0.8rem; }
-.related-post-card .profile-image { width: 1.5rem; height: 1.5rem; }
-.related-post-card .post-content { font-size: 0.8rem; margin: 0.5rem 0rem 0.75rem 0rem; }
-.profile { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; }
-.profile-image { width: 2rem; height: 2rem; border-radius: 50%; object-fit: cover; }
-.profile-name { font-weight: bold; font-size: 1rem; color: #444; }
-.profile-nip05, .profile-npub { text-decoration: none !important; font-size: 0.8rem; color: #999; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
-.profile-picture { width: 6rem; height: 6rem; border-radius: 50%; object-fit: cover; border: 3px solid rgba(0, 121, 107, 0.5); }
-@media (max-width: 370px) { .profile-picture { width: 4.5rem; height: 4.5rem; } }
-.profile-card { display: flex; flex-direction: column; gap: 1rem; padding: 1rem; background-color: #fff; border-radius: 8px; border: 1px solid #ddd; }
-.profile-header { display: flex; align-items: center; gap: 1rem; }
-.profile-info-container { flex: 1; display: flex; flex-direction: column; gap: 0.25rem; }
-.npub-container { display: flex; align-items: center; gap: 0.5rem; font-size: 0.75rem; word-break: break-all; padding: 0.25rem 0rem 0rem 0rem; }
-.copy-icon { cursor: pointer; transition: opacity 0.2s ease; }
-.copy-icon:hover { opacity: 0.4; }
-.about-text { font-size: 0.9rem; line-height: 1.5; color: #333; word-break: break-all; }
-.about-text a { color: #66b3ff; text-decoration: underline; }
-.about-text a:hover { color: #4da6ff; }
-.about-text .custom-emoji { height: 1.2rem; vertical-align: middle; }
-.post-info { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; color: #999; }
-.post-content { margin: 0.5rem 0rem; line-height: 1.5; overflow-wrap: break-word; word-break: break-word; }
-.post-content img { max-width: 15rem; max-height: 15rem; height: auto; display: block; margin: 0; }
-.post-content img.custom-emoji { vertical-align: middle; display: inline-block; height: 1.2rem; }
-.post-content ul, .post-content ol { list-style-position: inside; }
-.nostr-form { display: flex; flex-direction: row; align-items: center; gap: 0.5rem; padding-top: 0.25rem; }
-.form-input { flex: 1; min-width: 0; width: 100%; max-width: 400px; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; }
-.form-button { flex-shrink: 0; padding: 0.5rem 1.2rem !important; }
-.footer-section { padding: 0.5rem 0; border-top: 1px dashed #ddd; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; line-height: 1.5; background-color: #f7f7f7; color: #666; font-size: 0.9rem; padding: 0.5rem; }
+.container { max-width: 600px; margin: 0 auto; padding: 0.5rem; }
+.header-section, .footer-section { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0; border-bottom: 1px dashed #ddd; }
+.footer-section { border-bottom: none; border-top: 1px dashed #ddd; }
 .hidden { display: none; }
-.modal { display: none; position: fixed; z-index: 1; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0, 0, 0, 0.2); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); }
-.modal-content { margin: auto; display: block; max-width: 80%; max-height: 80vh; width: 80%; }
-.modal-image { width: auto; height: auto; max-width: 100%; max-height: 100%; object-fit: contain; display: block; margin: auto; }
-.close-button { color: #fff; font-size: 40px; font-weight: 700; cursor: pointer; transition: 0.3s; }
-.close-button:hover, .close-button:focus { color: #eee; text-decoration: none; cursor: pointer; }
-.custom-emoji-hover:hover { transform: scale(2.0); z-index: 10; }
+
+/* --- Components (Buttons/Forms) --- */
+button { border: none; font-size: 0.8rem; padding: 0.5rem 0.8rem; border-radius: 999px; font-weight: bold; cursor: pointer; background-color: #ffb366; color: #fff; transition: 0.3s; }
+button:hover { background-color: #ffa347; }
+.form-input { flex: 1; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; min-width: 0; }
+.nostr-form { display: flex; align-items: center; gap: 0.5rem; padding-top: 0.25rem; }
+
+/* --- Post / Profile --- */
+.post-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.post-content { margin: 0.5rem 0; line-height: 1.5; overflow-wrap: break-word; word-break: break-all; }
+.post-footer { margin-top: 10px; font-size: 0.8rem; color: #888; }
+.profile-card { display: flex; flex-direction: column; gap: 1rem; padding: 1rem; background: #fff; border-radius: 8px; border: 1px solid #ddd; }
+.profile-picture { width: 6rem; height: 6rem; border-radius: 50%; object-fit: cover; border: 3px solid rgba(0, 121, 107, 0.5); }
+.header-pic { width: 48px; height: 48px; border-radius: 50%; object-fit: cover; }
+.user-link { text-decoration: none; color: inherit; font-weight: bold; }
+.user-link:hover { text-decoration: underline; color: #66b3ff; }
+
+/* --- Reactions --- */
+.reactions-list { display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 0.25rem 0 0.75rem 0; }
+.reaction-group { display: inline-flex; align-items: center; background: #f8f8f8; padding: 2px 8px; border-radius: 15px; margin: 2px; font-size: 0.9rem; border: 1px solid #eee; }
+.reaction-avatars { margin-left: 8px; display: flex; align-items: center; flex-direction: row-reverse; }
+.reaction-avatar { width: 20px; height: 20px; border-radius: 50%; margin-left: -5px; border: 1px solid white; background: #eee; object-fit: cover; }
+.reaction-container { background: #fff5f8; border: 1px dashed #ffb3c1; border-radius: 12px; padding: 15px; margin-bottom: 20px; }
+
+/* --- Media / Custom Emoji --- */
+.video-container { margin: 10px 0; }
+.video-container.youtube { aspect-ratio: 16 / 9; }
+.video-container iframe, .video-container video { width: 100%; height: 100%; border-radius: 12px; border: none; }
+.video-container video { max-width: 100%; height: auto; border: 1px solid #eee; }
+.image-container { margin: 8px 0; }
+.post-image { max-width: 100%; max-height: 500px; border-radius: 12px; border: 1px solid #eee; display: block; cursor: zoom-in; }
+.custom-emoji { height: 1.2em; vertical-align: middle; display: inline-block; }
+
+/* --- Modal --- */
+.modal { display: none; position: fixed; z-index: 100; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); backdrop-filter: blur(5px); }
 </style>
 </head>
 <body>
@@ -252,19 +237,16 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
 
             return `
         <div class="main-post">
-            <div class="post-header" style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
-                <img src="${picture}" style="width: 48px; height: 48px; border-radius: 50%;">
-                <div>
-                    <div style="font-weight: bold;">${nameHtml}</div>
-                    <div style="font-size: 0.8rem; color: #666;">@${NostrTools.nip19.npubEncode(event.pubkey).substring(0, 10)}...</div>
-                </div>
-            </div>
-            <div class="post-content">${contentHtml}</div>
-            <div class="post-footer" style="margin-top: 10px; font-size: 0.8rem; color: #888;">
-                <span>${date}</span>
+        <div class="post-header">
+            <img src="${picture}" class="header-pic">
+            <div>
+                <div class="user-name">${nameHtml}</div>
+                <div class="profile-npub">@${NostrTools.nip19.npubEncode(event.pubkey).substring(0, 10)}...</div>
             </div>
         </div>
-        `;
+        <div class="post-content">${contentHtml}</div>
+        <div class="post-footer"><span>${date}</span></div>
+        </div>`;
         },
 
         // 入力フォームの生成
@@ -308,17 +290,29 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
                     const ytMatch = url.match(/(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
                     if (ytMatch) {
                         const videoId = ytMatch[1];
-                        return `<div class="video-container" style="margin:10px 0; aspect-ratio:16/9;"><iframe width="100%" height="100%" src="https://www.youtube.com/embed/${videoId}" frameborder="0" allowfullscreen style="border-radius:12px;"></iframe></div>`;
+                        return `
+                        <div class="video-container youtube">
+                            <iframe src="https://www.youtube.com/embed/${videoId}" allowfullscreen></iframe>
+                        </div>
+                        `;
                     }
 
                     // --- 動画 ---
                     if (/\.(mp4|webm|mov)(?:\?.*)?$/i.test(url)) {
-                        return `<div class="video-container" style="margin:10px 0;"><video src="${url}" controls style="max-width:100%; border-radius:12px; border:1px solid #eee;"></video></div>`;
+                        return `
+                        <div class="video-container">
+                            <video src="${url}" controls></video>
+                        </div>
+                        `;
                     }
 
                     // --- 画像 ---
                     if (/\.(png|jpe?g|gif|webp|svg)(?:\?.*)?$/i.test(url)) {
-                        return `<div class="image-container" style="margin:8px 0;"><img src="${url}" class="post-image" style="max-width:100%; max-height:500px; border-radius:12px; border:1px solid #eee; display:block; cursor:zoom-in;" onclick="openModal('${url}')" onerror="this.style.display='none';"></div>`;
+                        return `
+                        <div class="image-container">
+                            <img src="${url}" class="post-image" onclick="openModal('${url}')" onerror="this.style.display='none';">
+                        </div>
+                        `;
                     }
 
                     // --- 通常リンク ---
@@ -334,7 +328,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
                 // 5. カスタム絵文字の置換
                 tags.filter(t => t[0] === 'emoji').forEach(([_, code, url]) => {
                     const reg = new RegExp(`:${code}:`, 'g');
-                    html = html.replace(reg, `<img src="${url}" class="custom-emoji" title=":${code}:" style="height:1.2em; vertical-align:middle; display:inline-block;">`);
+                    html = html.replace(reg, `<img src="${url}" class="custom-emoji" title=":${code}:">`);
                 });
 
                 return html;
@@ -637,24 +631,17 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
                             const profile = window.dataStore.getProfile(pubkey) || {};
                             const pic = profile.picture || 'https://ompomz.github.io/favicon.ico';
                             const npub = NostrTools.nip19.npubEncode(pubkey);
-
-                            // プロフィールがなければ取得予約
-                            if (!window.dataStore.getProfile(pubkey)) {
-                                window.profileFetcher.request(pubkey);
-                            }
-
                             return `
-                                <a href="?id=${npub}">
-                                    <img src="${pic}" class="reaction-avatar" title="${profile.name || ''}" 
-                                         style="width:20px; height:20px; border-radius:50%; margin-left:-5px; border:1px solid white; background:#eee; object-fit: cover;">
-                                </a>`;
+                            <a href="?id=${npub}">
+                            <img src="${pic}" class="reaction-avatar" title="${profile.name || ''}">
+                            </a>`;
                         }).join('');
 
                         html += `
-                            <div class="reaction-group" style="display:inline-flex; align-items:center; background:#f8f8f8; padding:2px 8px; border-radius:15px; margin:2px; font-size:0.9rem; border: 1px solid #eee;">
-                                <span class="reaction-emoji" style="display:inline-flex; align-items:center;">${emojiHtml}</span>
-                                <div class="reaction-avatars" style="margin-left:8px; display:flex; align-items:center;">${avatarsHtml}</div>
-                            </div>`;
+                        <div class="reaction-group">
+                        <span class="reaction-emoji">${emojiHtml}</span>
+                        <div class="reaction-avatars">${avatarsHtml}</div>
+                        </div>`;
                     }
                     reactionsList.innerHTML = html;
 
@@ -700,19 +687,16 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
             })();
 
         renderArea.innerHTML = `
-        <div class="reaction-container" style="background: #fff5f8; border: 1px dashed #ffb3c1; border-radius: 12px; padding: 15px; margin-bottom: 20px;">
-            <div style="font-size: 1.2rem; display: flex; align-items: center; gap: 10px;">
-                <span style="font-size: 2rem;">${emojiHtml}</span>
-                <span>リアクションされました</span>
-            </div>
-            <div style="margin-top: 10px; font-size: 0.9rem; color: #666;">
-                By: ${nameHtml}
-            </div>
+        <div class="reaction-container">
+        <div style="font-size: 1.2rem; display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 2rem;">${emojiHtml}</span>
+            <span>リアクションされました</span>
+        </div>
+        <div class="post-footer" style="color:#666">By: ${nameHtml}</div>
         </div>
         <div id="reaction-target-root">
-            <p style="color: #888; font-size: 0.8rem;">対象の投稿を読み込み中...</p>
-        </div>
-    `;
+        <p style="color: #888; font-size: 0.8rem;">対象の投稿を読み込み中...</p>
+        </div>`;
 
         // 4. プロフィールがなければ取得
         if (!profile) {

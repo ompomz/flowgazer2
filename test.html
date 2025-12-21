@@ -142,14 +142,15 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
             return null;
         }
     }
+    
+    const FALLBACK_RELAYS = [
+        'wss://relay.damus.io/',
+        'wss://nos.lol/',
+        'wss://relay.nostr.band/'
+    ];
 
     function getPriorityRelays(hintRelays) {
-        const fallbackRelays = [
-            'wss://relay.damus.io/',
-            'wss://nos.lol/',
-            'wss://relay.nostr.band/'
-        ];
-        const combined = new Set([...hintRelays, ...fallbackRelays]);
+        const combined = new Set([...hintRelays, ...FALLBACK_RELAYS]);
         return Array.from(combined);
     }
 

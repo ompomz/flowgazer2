@@ -472,25 +472,54 @@ button:hover { background-color: #ffa347; }
             const decoded = parseNevent(originalId);
             if (!decoded) throw new Error("IDの解析に失敗しました。");
 
-            const eventId = decoded.id; // parseNeventの戻り値に合わせたプロパティ名
+            const renderArea = document.getElementById('render-area');
+
+            // ==========================================
+            // ケースA: npub (ユーザー投稿一覧表示)
+            // ==========================================
+            if (originalId.startsWith('npub')) {
+                const pubkey = decoded.id; // parseNeventでデコードされた公開鍵
+                showStatus('ユーザーの投稿を取得中...');
+
+                // app.jsに追加した汎用メソッドを使って投稿を取得
+                const posts = await window.app.fetchUserPosts(pubkey);
+
+                if (posts && posts.length > 0) {
+                    renderArea.innerHTML = ''; // エリアをクリア
+
+                    // 投稿を1つずつ描画
+                    for (const post of posts) {
+                        // 第2引数を true にしてタイムラインモード（詳細ページへのリンク付き等）で描画
+                        await renderStandardPost(post, true);
+                    }
+                    showStatus(''); // 完了
+                } else {
+                    showStatus('投稿が見つかりませんでした。', true);
+                    renderArea.innerHTML = Components.inputForm();
+                    setupFormListener();
+                }
+                return; // ここで終了
+            }
+
+            // ==========================================
+            // ケースB: nevent / note (単一イベント詳細表示)
+            // ==========================================
+            const eventId = decoded.id;
             const existingEvent = window.dataStore.getEvent(eventId);
 
             let result;
 
             // 2. データの取得（キャッシュ or リレー）
             if (existingEvent) {
-                // すでに持っている場合はリレー情報は不明
                 result = { event: existingEvent, foundRelay: null };
             } else {
                 showStatus('イベントをロード中...');
-                // fetchSingleEvent から { event, foundRelay } を受け取る
                 result = await fetchSingleEvent(originalId);
             }
 
             // 結果の存在確認
             if (!result || !result.event) {
                 showStatus('イベントが見つかりませんでした。', true);
-                const renderArea = document.getElementById('render-area');
                 if (renderArea) {
                     renderArea.innerHTML = Components.inputForm();
                     setupFormListener();
@@ -505,10 +534,9 @@ button:hover { background-color: #ffa347; }
             switch (event.kind) {
                 case 1:
                 case 30023:
-                    await renderStandardPost(event);
+                    await renderStandardPost(event, false); // 詳細表示なので false
                     break;
                 case 6:
-                    // リポスト専用の関数がある場合はそれを使用、なければGeneric
                     if (typeof renderRepost === 'function') {
                         renderRepost(event);
                     } else {
@@ -531,7 +559,6 @@ button:hover { background-color: #ffa347; }
             }
 
             // 4. 関連データ（リプライ・リアクション）の取得
-            // 発見したリレーがあれば最優先にし、重複を除去してリスト作成
             const relaysForRelated = foundRelay
                 ? [...new Set([foundRelay, ...FALLBACK_RELAYS])]
                 : FALLBACK_RELAYS;
@@ -545,7 +572,6 @@ button:hover { background-color: #ffa347; }
             console.error("Workflow Error:", error);
             showStatus('エラーが発生しました: ' + error.message, true);
 
-            // エラー時も入力フォームに戻れるようにする
             const renderArea = document.getElementById('render-area');
             if (renderArea) {
                 renderArea.innerHTML = Components.inputForm();
@@ -762,6 +788,9 @@ button:hover { background-color: #ffa347; }
         // URLのIDから今のイベントを再描画する
         initializeApp(); 
     });
+// 投稿を描画する際、HTMLに以下のような仕掛けを入れるだけ！
+// 長押しイベント（またはボタン）からこれを呼ぶ
+window.sendLikeEvent(event.id, event.pubkey);
 
 </script>
 

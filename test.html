@@ -73,7 +73,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
         <button id="btn-share">シェア</button>
         <button id="btn-auth" class="auth-button">鍵をお持ちの方はこちら</button>
     </div>
-
+    <div style="margin: 0.5rem 0rem;">
     <main id="main-content">
         <div id="loading-status" class="hidden"></div>
         <div id="render-area"></div>
@@ -81,15 +81,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
 
     <section id="sub-content" class="hidden">
         <div id="reactions-section">
-            <h3>リアクション</h3>
             <div id="reactions-list"></div>
         </div>
         <div id="related-events-section">
-            <h3>関連イベント</h3>
             <div id="related-events-list"></div>
         </div>
     </section>
-
+    </div>
     <div id="footer-section" class="footer-section">
         <button id="btn-back-footer">もどる</button>
         <button id="save-list-btn" style="display:none;">フォローリストを保存</button>
@@ -129,7 +127,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
     }
 
     function showStatus(message) {
-        const statusElement = document.getElementById('loading-status'); // HTML側のIDに合わせてください
+        const statusElement = document.getElementById('loading-status');
         if (!statusElement) return;
 
         statusElement.textContent = message;
@@ -187,7 +185,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
     const Components = {
         // プロフィールカードの生成
         profileCard: (profile, npub) => {
-            const picture = profile.picture || './favicon.ico';
+            const picture = profile.picture || 'https://ompomz.github.io/favicon.ico';
             const name = profile.name || 'Unknown';
             const about = profile.about ? `<p class="about-text">${Components.utils.escape(profile.about).replace(/\n/g, '<br>')}</p>` : '';
 
@@ -208,7 +206,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
         // 投稿（イベント）本体の生成
         eventBody: (event, contentHtml, profile = {}) => {
             const date = new Date(event.created_at * 1000).toLocaleString();
-            const picture = profile.picture || './favicon.ico';
+            const picture = profile.picture || 'https://ompomz.github.io/favicon.ico';
             const nameHtml = Components.utils.getNameLink(event.pubkey, profile);
 
             return `
@@ -557,7 +555,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
                         // アバターのリスト作成
                         const avatarsHtml = Array.from(group.pubkeys).map(pubkey => {
                             const profile = window.dataStore.getProfile(pubkey) || {};
-                            const pic = profile.picture || './favicon.ico';
+                            const pic = profile.picture || 'https://ompomz.github.io/favicon.ico';
                             const npub = NostrTools.nip19.npubEncode(pubkey);
 
                             // プロフィールがなければ取得予約

@@ -106,12 +106,36 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
 <script src="./quote-manager.js"></script>
 
 <script>
+    function parseNevent(bech32Address) {
+        try {
+            const { type, data } = window.NostrTools.nip19.decode(bech32Address);
+            if (type === 'nevent') {
+                return {
+                    id: data.id,
+                    relays: data.relays || [],
+                    author: data.author || null,
+                    kind: data.kind || null
+                };
+            }
+            if (type === 'note') {
+                return { id: data, relays: [] };
+            }
+            return null;
+        } catch (error) {
+            console.error("IDのデコードに失敗しました:", error);
+            return null;
+        }
+    }
 
-    const FALLBACK_RELAYS = [
-        "wss://relay.damus.io/",
-        "wss://nos.lol/",
-        "wss://relay.nostr.band/"
-    ];
+    function getPriorityRelays(hintRelays) {
+        const fallbackRelays = [
+            'wss://relay.damus.io/',
+            'wss://nos.lol/',
+            'wss://relay.nostr.band/'
+        ];
+        const combined = new Set([...hintRelays, ...fallbackRelays]);
+        return Array.from(combined);
+    }
 
     function setupFormListener() {
         const form = document.getElementById('nostr-form');
@@ -403,53 +427,72 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
         }
 
     // --- 1. まずイベントを1つだけ取ってくる関数 ---
-    async function fetchSingleEvent(decoded) {
-        const eventId = typeof decoded === 'string' ? decoded : (decoded.data?.id || decoded.data);
-        if (!eventId) return null;
+    async function fetchSingleEvent(neventString) {
+        // 1. neventからIDとヒントリレーを抽出
+        const decoded = parseNevent(neventString);
+        if (!decoded) throw new Error("無効なID形式です");
 
-        // 接続先を増やす（ID指定があれば優先、なければFallback全部）
-        let relays = FALLBACK_RELAYS;
-        if (typeof decoded === 'object' && decoded.data?.relays?.length > 0) {
-            relays = Array.from(new Set([...decoded.data.relays, ...FALLBACK_RELAYS]));
-        }
+        const { id: eventId, relays: hintRelays } = decoded;
 
-        console.log(`📡 複数リレーでイベント検索中: ${eventId.substring(0, 8)}`, relays);
+        // 2. 優先順位をつけたリレーリストを作成
+        const targetRelays = getPriorityRelays(hintRelays);
 
-        return new Promise((resolve) => {
-            let isResolved = false;
-            const subId = `fetch-once-${eventId.substring(0, 8)}`;
+        console.log("探索ターゲットリレー:", targetRelays);
 
-            // 8秒でタイムアウト
-            const timer = setTimeout(() => {
-                if (!isResolved) {
-                    isResolved = true;
-                    relays.forEach(url => window.relayManager.unsubscribe(subId));
-                    resolve(null);
-                }
-            }, 8000);
+        // 3. 非同期ループで順番に問い合わせ
+        for (const url of targetRelays) {
+            try {
+                console.log(`[探索開始] ${url} に接続中...`);
 
-            // 指定したすべてのリレーに並列でリクエスト
-            relays.forEach(async (url) => {
-                try {
-                    await window.relayManager.connect(url);
-                    window.relayManager.subscribe(subId, { ids: [eventId], limit: 1 }, (type, event) => {
-                        if (type === 'EVENT' && event && !isResolved) {
-                            isResolved = true;
-                            clearTimeout(timer);
+                // 接続を待機（リレーマネージャーのconnectがPromiseを返す前提）
+                await window.relayManager.connect(url);
 
-                            // 全リレーの購読を解除
-                            relays.forEach(u => window.relayManager.unsubscribe(subId));
+                const event = await new Promise((resolve) => {
+                    const subId = 'single_fetch_' + Math.random().toString(36).substring(7);
+                    let found = false;
 
-                            window.dataStore.addEvent(event);
-                            console.log(`✅ イベント発見 (${url}): ${eventId.substring(0, 8)}`);
-                            resolve(event);
+                    // タイムアウト設定（5秒反応がなければ次のリレーへ）
+                    const timeout = setTimeout(() => {
+                        console.log(`[タイムアウト] ${url} の応答が遅いためスキップします`);
+                        window.relayManager.unsubscribe(subId);
+                        resolve(null);
+                    }, 5000);
+
+                    window.relayManager.subscribe(subId, { ids: [eventId], limit: 1 }, (type, data) => {
+                        if (type === 'EVENT' && data && !found) {
+                            found = true;
+                            clearTimeout(timeout);
+                            console.log(`[発見！] ${url} からイベントを取得しました`);
+                            window.relayManager.unsubscribe(subId);
+                            resolve(data);
+                        }
+
+                        if (type === 'EOSE') {
+                            // リレーが「もう探したけど無いよ」と答えた場合
+                            clearTimeout(timeout);
+                            console.log(`[在庫なし] ${url} には対象のイベントがありませんでした`);
+                            window.relayManager.unsubscribe(subId);
+                            resolve(null);
                         }
                     });
-                } catch (e) {
-                    console.warn(`Connection failed for ${url}`);
+                });
+
+                // イベントが見つかったら、ループを抜けて結果を返す
+                if (event) {
+                    // 成功したらこのリレーとの接続は維持したままでもOK（後の関連データ取得に使えるため）
+                    return event;
                 }
-            });
-        });
+
+                // 見つからなかった場合は、このリレーは一旦切断してお行儀よくする
+                //（必要であれば次のリレーへ行く前に少し待機を入れることも可能です）
+                await window.relayManager.disconnect(url);
+
+            } catch (err) {
+                console.warn(`[接続失敗] ${url} へのアクセスに失敗しました:`, err);
+            }
+        }
+
+        throw new Error("すべてのリレーを探索しましたが、イベントは見つかりませんでした");
     }
 
     // --- 2. 振り分けを行うメインワークフロー ---

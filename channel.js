@@ -49,46 +49,54 @@ const ChannelHandlers = {
         const renderArea = document.getElementById('render-area');
         const channelId = event.tags.find(t => t[0] === 'e' && (t[3] === 'root' || !t[3]))?.[1];
 
-        // --- hex を nevent に変換 ---
-        let neventId = channelId || "";
-        if (channelId) {
-            try {
-                neventId = NostrTools.nip19.neventEncode({ id: channelId });
-            } catch (e) {
-                console.error("nevent変換失敗", e);
+        if (!channelId) return;
+
+        // 1. まず ID を nevent に変換（リンク用）
+        const neventId = NostrTools.nip19.neventEncode({ id: channelId });
+
+        // 2. チャンネル情報の取得状態を管理
+        // DataStoreにチャンネル名が保存されているか確認（仮に getChannelName という関数があるとするか、直接Storeを見る）
+        let channelName = channelId.substring(0, 8); // デフォルトはIDの一部
+
+        // チャンネル情報を取得しにいく
+        const subId = `ch-info-${channelId.substring(0, 8)}`;
+        relayManager.subscribe(subId, { kinds: [40], ids: [channelId], limit: 1 }, (type, chEvent) => {
+            if (type === 'EVENT' && chEvent) {
+                try {
+                    const meta = JSON.parse(chEvent.content);
+                    const displayName = meta.name || "無名チャンネル";
+
+                    // チャンネル名が見つかったら、該当箇所のテキストを書き換える
+                    const linkEl = document.getElementById(`ctx-link-${event.id}`);
+                    if (linkEl) linkEl.textContent = displayName;
+
+                    relayManager.unsubscribe(subId);
+                } catch (e) { console.error(e); }
             }
-        }
+        });
 
-        const contentHtml = await Components.utils.formatContent(event.content, event.tags);
+        // 3. プロフィールの取得（さっきの修正と同様）
         let profile = window.dataStore.getProfile(event.pubkey);
-
-        // --- プロフィールがない場合の取得処理 ---
         if (!profile) {
-            const subId = `profile-for-kind42-${event.pubkey.substring(0, 8)}`;
-            relayManager.subscribe(subId, { kinds: [0], authors: [event.pubkey], limit: 1 }, (type, pEvent) => {
+            const pSubId = `p-msg-${event.pubkey.substring(0, 8)}`;
+            relayManager.subscribe(pSubId, { kinds: [0], authors: [event.pubkey], limit: 1 }, (type, pEvent) => {
                 if (type === 'EVENT' && pEvent) {
-                    try {
-                        const profileData = JSON.parse(pEvent.content);
-                        window.dataStore.addProfile(event.pubkey, profileData);
-
-                        // プロフィールが届いたので、再描画
-                        this.renderMessage(event);
-                    } catch (err) {
-                        console.error("プロフィール解析失敗", err);
-                    } finally {
-                        relayManager.unsubscribe(subId);
-                    }
+                    window.dataStore.addProfile(event.pubkey, JSON.parse(pEvent.content));
+                    this.renderMessage(event); // プロフィールが届いたら全体再描画
+                    relayManager.unsubscribe(pSubId);
                 }
             });
         }
 
-        // --- 描画処理 ---
+        const contentHtml = await Components.utils.formatContent(event.content, event.tags);
+
+        // 4. 描画（リンクにIDを振っておいて、後から名前を注入できるようにする）
         renderArea.innerHTML = `
-        <div class="channel-context" style="font-size: 0.8rem; color: #888; margin-bottom: 10px;">
-        kind:40 : <a href="?id=${neventId}">${neventId ? neventId.substring(0, 15) + '...' : 'unknown'}</a>
-        </div>
-        ${Components.eventBody(event, contentHtml, profile)}
-    `;
+            <div class="channel-context" style="font-size: 0.8rem; color: #888; margin-bottom: 10px; background: #f9f9f9; padding: 5px 10px; border-radius: 5px;">
+                💬 チャンネル: <a href="?id=${neventId}" id="ctx-link-${event.id}" style="font-weight: bold; color: #5851db; text-decoration: none;">${channelName}...</a>
+            </div>
+            ${Components.eventBody(event, contentHtml, profile)}
+        `;
 
         fetchRelatedData(event.id);
     },

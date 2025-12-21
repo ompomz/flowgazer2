@@ -209,14 +209,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
         eventBody: (event, contentHtml, profile = {}) => {
             const date = new Date(event.created_at * 1000).toLocaleString();
             const picture = profile.picture || './favicon.ico';
-            const name = profile.display_name || profile.name || 'Unknown';
+            const nameHtml = Components.utils.getNameLink(event.pubkey, profile);
 
             return `
         <div class="main-post">
             <div class="post-header" style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
                 <img src="${picture}" style="width: 48px; height: 48px; border-radius: 50%;">
                 <div>
-                    <div style="font-weight: bold;">${Components.utils.escape(name)}</div>
+                    <div style="font-weight: bold;">${nameHtml}</div>
                     <div style="font-size: 0.8rem; color: #666;">@${NostrTools.nip19.npubEncode(event.pubkey).substring(0, 10)}...</div>
                 </div>
             </div>
@@ -242,6 +242,15 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
         // ユーティリティ（テキスト成形など）
         utils: {
             escape: (str) => str.replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m])),
+
+            // pubkeyからリンク付きの名前（またはnpubの一部）を返す
+            getNameLink: (pubkey, profile = {}) => {
+                const name = profile.display_name || profile.name || "";
+                const npub = NostrTools.nip19.npubEncode(pubkey);
+                const displayName = name ? Components.utils.escape(name) : `${npub.substring(0, 10)}...`;
+                // クリックで ?id=npub... へ移動
+                return `<a href="?id=${npub}" class="user-link" style="text-decoration: none; color: inherit; font-weight: bold;">${displayName}</a>`;
+            },
 
             // 投稿本文をリッチにする（画像展開・リンク化）
             formatContent: async (content, tags) => {
@@ -290,12 +299,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
         },
         
         quoteCard: (eventId, contentHtml = "読み込み中...", profile = {}) => {
-            const name = profile.display_name || profile.name || '...';
+            const nameHtml = profile.pubkey ? Components.utils.getNameLink(profile.pubkey, profile) : (profile.name || "...");
             return `
-        <div id="quote-${eventId}" class="quote-card" style="border: 1px solid #ddd; border-radius: 8px; padding: 10px; margin: 10px 0; font-size: 0.9rem; background: #fafafa;">
+        <div id="quote-${eventId}" class="quote-card" ...>
             <div style="display: flex; align-items: center; gap: 5px; margin-bottom: 5px;">
-                <img src="${profile.picture || ''}" style="width: 20px; height: 20px; border-radius: 50%; background: #eee;">
-                <span style="font-weight: bold;">${Components.utils.escape(name)}</span>
+                <img src="${profile.picture || ''}" ...>
+                <span style="font-weight: bold;">${nameHtml}</span>
             </div>
             <div class="quote-content">${contentHtml}</div>
         </div>
@@ -552,6 +561,15 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
         const emojiHtml = await Components.utils.formatContent(emoji, event.tags);
         const profile = window.dataStore.getProfile(event.pubkey);
 
+        // ★名前リンクの生成
+        const nameHtml = (typeof Components.utils.getNameLink === 'function') 
+            ? Components.utils.getNameLink(event.pubkey, profile)
+            : (() => {
+                const name = profile?.display_name || profile?.name || event.pubkey.substring(0, 8);
+                const npub = NostrTools.nip19.npubEncode(event.pubkey);
+                return `<a href="?id=${npub}" style="text-decoration: none; color: inherit; font-weight: bold;">${Components.utils.escape(name)}</a>`;
+            })();
+
         renderArea.innerHTML = `
         <div class="reaction-container" style="background: #fff5f8; border: 1px dashed #ffb3c1; border-radius: 12px; padding: 15px; margin-bottom: 20px;">
             <div style="font-size: 1.2rem; display: flex; align-items: center; gap: 10px;">
@@ -559,7 +577,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
                 <span>リアクションされました</span>
             </div>
             <div style="margin-top: 10px; font-size: 0.9rem; color: #666;">
-                By: <b>${profile?.display_name || profile?.name || event.pubkey.substring(0, 8)}</b>
+                By: ${nameHtml}
             </div>
         </div>
         <div id="reaction-target-root">
@@ -567,7 +585,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
         </div>
     `;
 
-        // 4. プロフィールがなければ取得（いつものパターン）
+        // 4. プロフィールがなければ取得
         if (!profile) {
             window.profileFetcher.request(event.pubkey);
         }

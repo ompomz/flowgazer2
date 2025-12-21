@@ -443,42 +443,26 @@ button:hover { background-color: #ffa347; }
 
     // --- 1. まずイベントを1つだけ取ってくる関数 ---
     async function fetchSingleEvent(originalId) {
-        // 1. IDとヒントリレーを抽出
         const decoded = parseNevent(originalId);
-        if (!decoded) {
-            console.error("IDの解析に失敗しました:", originalId);
-            return null;
-        }
+        if (!decoded) return null;
 
         const { id, relays: hintRelays } = decoded;
-
-        // 2. 優先順位をつけた探索先リレーリストを作成
         const targetRelays = getPriorityRelays(hintRelays || []);
-        console.log("探索ターゲットリレー:", targetRelays);
 
-        // 3. リレーを順番に巡回してイベントを探索
         for (const url of targetRelays) {
             try {
                 console.log(`[探索開始] ${url} に接続中...`);
-
-                // リレーマネージャーの fetchEvent を使用（接続・取得・タイムアウト管理を任せる想定）
-                const event = await window.relayManager.fetchEvent(url, { ids: [id], limit: 1 });
+                const event = await window.relayManager.getEvent(url, { ids: [id] });
 
                 if (event) {
                     console.log(`[発見！] ${url} でイベントを発見しました`);
                     return { event, foundRelay: url };
                 }
-
-                console.log(`[不在] ${url} には対象のイベントがありませんでした`);
-
             } catch (error) {
-                console.warn(`[エラー] ${url} での取得中に問題が発生しました:`, error);
-                // エラーが発生しても次のリレーの探索を続けるため、ループは継続
+                console.warn(`[エラー] ${url} で問題が発生しました:`, error);
             }
         }
-
-        console.error("すべてのリレーを探索しましたが、イベントは見つかりませんでした");
-        return null; // 最後まで見つからなかった場合
+        return null;
     }
 
     // --- 2. 振り分けを行うメインワークフロー ---

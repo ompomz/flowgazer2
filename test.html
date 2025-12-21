@@ -97,38 +97,26 @@ button:hover { background-color: #ffa347; }
 
 <script>
     function parseNevent(input) {
-        if (input && typeof input === 'object' && input.type) {
-            const data = input.data;
-            if (input.type === 'nevent') {
-                return {
-                    id: data.id,
-                    relays: data.relays || [],
-                    author: data.author || null,
-                    kind: data.kind || null
-                };
-            } else if (input.type === 'note') {
-                return { id: data, relays: [] };
-            }
-            return null;
-        }
         try {
-            if (typeof input !== 'string') return null;
+            const decoded = window.NostrTools.nip19.decode(input);
+            const type = decoded.type; // 'npub', 'nevent', 'note' など
+            const data = decoded.data;
 
-            const { type, data } = window.NostrTools.nip19.decode(input);
+            if (type === 'npub') {
+                return { id: data, type: 'npub' }; // pubkeyをidとして返す
+            }
             if (type === 'nevent') {
-                return {
-                    id: data.id,
-                    relays: data.relays || [],
-                    author: data.author || null,
-                    kind: data.kind || null
-                };
+                return { id: data.id, type: 'nevent', relays: data.relays || [] };
             }
             if (type === 'note') {
-                return { id: data, relays: [] };
+                return { id: data, type: 'note' };
+            }
+            if (type === 'nprofile') {
+                return { id: data.pubkey, type: 'nprofile', relays: data.relays || [] };
             }
             return null;
-        } catch (error) {
-            console.error("IDのデコードに失敗しました:", error);
+        } catch (e) {
+            console.error("NIP-19 Decode Error:", e);
             return null;
         }
     }
@@ -471,35 +459,39 @@ button:hover { background-color: #ffa347; }
         try {
             // 1. IDの解析
             const decoded = parseNevent(originalId);
-            if (!decoded) throw new Error("IDの解析に失敗しました。");
+
+            // 解析に失敗した場合のガード
+            if (!decoded || !decoded.id) {
+                throw new Error("IDの形式が正しくありません。");
+            }
 
             const renderArea = document.getElementById('render-area');
 
             // ==========================================
-            // ケースA: npub (ユーザー投稿一覧表示)
+            // ケースA: npub または nprofile (ユーザー投稿一覧表示)
             // ==========================================
-            if (originalId.startsWith('npub')) {
-                const pubkey = decoded.id; // parseNeventでデコードされた公開鍵
+            if (originalId.startsWith('npub') || originalId.startsWith('nprofile')) {
+                const pubkey = decoded.id;
                 showStatus('ユーザーの投稿を取得中...');
 
-                // app.jsに追加した汎用メソッドを使って投稿を取得
+                // app.js の汎用メソッドを使って投稿を取得
+                // window.app が初期化されていることが前提
                 const posts = await window.app.fetchUserPosts(pubkey);
 
                 if (posts && posts.length > 0) {
                     renderArea.innerHTML = ''; // エリアをクリア
 
-                    // 投稿を1つずつ描画
                     for (const post of posts) {
-                        // 第2引数を true にしてタイムラインモード（詳細ページへのリンク付き等）で描画
+                        // 第2引数 true: タイムラインモードで描画
                         await renderStandardPost(post, true);
                     }
-                    showStatus(''); // 完了
+                    showStatus('');
                 } else {
                     showStatus('投稿が見つかりませんでした。', true);
                     renderArea.innerHTML = Components.inputForm();
                     setupFormListener();
                 }
-                return; // ここで終了
+                return; // 投稿一覧を出したらここで終了
             }
 
             // ==========================================
@@ -510,11 +502,12 @@ button:hover { background-color: #ffa347; }
 
             let result;
 
-            // 2. データの取得（キャッシュ or リレー）
+            // データの取得（キャッシュ or リレー）
             if (existingEvent) {
                 result = { event: existingEvent, foundRelay: null };
             } else {
                 showStatus('イベントをロード中...');
+                // fetchSingleEvent は nevent/note 用の既存ロジック
                 result = await fetchSingleEvent(originalId);
             }
 
@@ -529,13 +522,13 @@ button:hover { background-color: #ffa347; }
             }
 
             const { event, foundRelay } = result;
-            console.log(`📡 Event Kind: ${event.kind} を検知しました (Source: ${foundRelay || 'Cache'})`);
+            console.log(`📡 Event Kind: ${event.kind} (Source: ${foundRelay || 'Cache'})`);
 
             // 3. Kind ごとの表示処理に分岐
             switch (event.kind) {
                 case 1:
                 case 30023:
-                    await renderStandardPost(event, false); // 詳細表示なので false
+                    await renderStandardPost(event, false); // 詳細表示
                     break;
                 case 6:
                     if (typeof renderRepost === 'function') {
@@ -564,14 +557,12 @@ button:hover { background-color: #ffa347; }
                 ? [...new Set([foundRelay, ...FALLBACK_RELAYS])]
                 : FALLBACK_RELAYS;
 
-            console.log("関連データの取得リレー:", relaysForRelated);
             fetchRelatedData(event.id, relaysForRelated);
-
-            showStatus(''); // 読み込み完了
+            showStatus('');
 
         } catch (error) {
             console.error("Workflow Error:", error);
-            showStatus('エラーが発生しました: ' + error.message, true);
+            showStatus('エラー: ' + error.message, true);
 
             const renderArea = document.getElementById('render-area');
             if (renderArea) {

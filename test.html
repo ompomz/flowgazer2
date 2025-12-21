@@ -376,69 +376,98 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
             }
         }
 
-    // 投稿表示の流れ
-    async function startEventWorkflow(decoded) {
-        const renderArea = document.getElementById('render-area');
+    // --- 1. まずイベントを1つだけ取ってくる関数 ---
+    async function fetchSingleEvent(decoded) {
         const eventId = decoded.data.id || decoded.data;
-        const relays = decoded.data.relays || FALLBACK_RELAYS;
+        const relays = (decoded.data.relays && decoded.data.relays.length > 0) ? decoded.data.relays : FALLBACK_RELAYS;
 
-        showStatus('イベントを取得中...');
-
-        try {
+        return new Promise(async (resolve) => {
             await relayManager.connect(relays[0]);
 
-            // 購読を開始。イベントが届いたらこの handler が動く
-            relayManager.subscribe('main-event', { ids: [eventId] }, async (type, event) => {
+            const subId = `fetch-once-${eventId.substring(0, 8)}`;
+
+            // タイムアウト設定（5秒待っても来なければnull）
+            const timer = setTimeout(() => {
+                relayManager.unsubscribe(subId);
+                resolve(null);
+            }, 5000);
+
+            relayManager.subscribe(subId, { ids: [eventId], limit: 1 }, (type, event) => {
                 if (type === 'EVENT' && event) {
-                    window.dataStore.addEvent(event);
-                    const storedEvent = window.dataStore.getEvent(eventId);
-
-                    // --- ここでプロフィール取得を追加 ---
-                    // 1. まずDataStoreにキャッシュがあるか確認
-                    let profile = window.dataStore.getProfile(event.pubkey);
-
-                    // 2. キャッシュがなければリレーに聞く
-                    if (!profile) {
-                        const profileSubId = `profile-${event.pubkey}`;
-
-                        relayManager.subscribe(profileSubId, { kinds: [0], authors: [event.pubkey], limit: 1 }, (pType, pEvent) => {
-                            if (pType === 'EVENT' && pEvent) {
-                                const profileData = JSON.parse(pEvent.content);
-                                window.dataStore.addProfile(event.pubkey, profileData);
-                                renderFullPost(storedEvent, profileData);
-                                relayManager.unsubscribe(profileSubId);
-                            }
-                        });
-                    }
-                    
-                    renderFullPost(storedEvent, profile);
-
-                    showStatus('');
-                    fetchRelatedData(eventId, relays);
-                    relayManager.unsubscribe('main-event');
+                    clearTimeout(timer);
+                    relayManager.unsubscribe(subId);
+                    resolve(event);
                 }
             });
+        });
+    }
 
-            // 描画用のヘルパー関数（再利用するため）
-            async function renderFullPost(event, profile) {
-                const renderArea = document.getElementById('render-area');
+    // --- 2. 振り分けを行うメインワークフロー ---
+    async function startEventWorkflow(decoded) {
+        showStatus('イベントをロード中...');
 
-                // Markdown（Kind 30023）かどうかの判定もここに入れる
-                let contentHtml;
-                if (event.kind === 30023) {
-                    contentHtml = window.marked.parse(event.content);
-                } else {
-                    contentHtml = await Components.utils.formatContent(event.content, event.tags);
-                }
+        const event = await fetchSingleEvent(decoded);
 
-                renderArea.innerHTML = Components.eventBody(event, contentHtml, profile);
-                fetchQuotes();
-            }
-
-        } catch (err) {
-            console.error(err);
-            showStatus('接続エラーが発生しました');
+        if (!event) {
+            showStatus('イベントが見つかりませんでした。');
+            const renderArea = document.getElementById('render-area');
+            renderArea.innerHTML = Components.inputForm();
+            setupFormListener();
+            return;
         }
+
+        // ここで Kind ごとの処理に分岐！
+        console.log(`📡 Event Kind: ${event.kind} を検知しました`);
+
+        switch (event.kind) {
+            case 1:
+            case 30023:
+                // 通常投稿、またはロングフォーム
+                await renderStandardPost(event);
+                break;
+
+            case 40:
+            case 41:
+                // チャンネル情報そのもの
+                renderChannelMetadata(event);
+                break;
+
+            case 42:
+                // チャンネルメッセージ（NIP-28）
+                await renderChannelMessage(event);
+                break;
+
+            case 6:
+                // リポスト（元のイベントを取得しに行くなどの処理が必要）
+                renderGenericEvent(event, "リポストされました");
+                break;
+
+            default:
+                // その他（未定義のKind）
+                renderGenericEvent(event);
+                break;
+        }
+
+        showStatus(''); // 読み込み完了
+    }
+
+    async function renderChannelMessage(event) {
+        const renderArea = document.getElementById('render-area');
+        const channelId = event.tags.find(t => t[0] === 'e' && (t[3] === 'root' || !t[3]))?.[1];
+
+        // 本文の整形
+        const contentHtml = await Components.utils.formatContent(event.content, event.tags);
+        const profile = window.dataStore.getProfile(event.pubkey);
+
+        renderArea.innerHTML = `
+        <div class="channel-context" style="font-size: 0.8rem; color: #888; margin-bottom: 10px;">
+            💬 チャンネル内の発言: <a href="?id=${channelId}">${channelId?.substring(0, 8)}...</a>
+        </div>
+        ${Components.eventBody(event, contentHtml, profile)}
+    `;
+
+        // 関連データの取得（リプライなど）
+        fetchRelatedData(event.id);
     }
 
     // --- 関連データ（リプライ・リアクション）の取得 ---
